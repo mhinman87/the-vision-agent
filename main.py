@@ -16,6 +16,12 @@ import uvicorn
 # --- Define the agent state ---
 from typing import TypedDict, List, Optional
 
+from pydantic import BaseModel
+
+class MessageRequest(BaseModel):
+    message: str
+
+
 class AgentState(TypedDict):
     messages: List[dict]
     classification: Optional[str]
@@ -81,9 +87,10 @@ app.add_middleware(
 )
 
 @app.post("/vision")
-async def vision_chat(request: Request):
-    body = await request.json()
-    user_input = body.get("message")
+async def vision_chat(body: MessageRequest):
+    user_input = body.message
+
+
     
     state = {
         "messages": [{"role": "user", "content": user_input}]
