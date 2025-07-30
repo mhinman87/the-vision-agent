@@ -3,7 +3,6 @@ load_dotenv()
 
 
 # main.py
-
 import os
 from langgraph.graph import StateGraph, END
 from langchain_community.chat_models import ChatOpenAI
@@ -11,6 +10,10 @@ from langchain_community.chat_models import ChatOpenAI
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from collections import defaultdict
+
+chat_sessions = defaultdict(list)
+
 
 
 # --- Define the agent state ---
@@ -86,16 +89,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi import Body
+
 @app.post("/vision")
-async def vision_chat(body: MessageRequest):
-    user_input = body.message
+async def vision_chat(body: dict = Body(...)):
+    session_id = body.get("session_id", "default")
+    user_input = body["message"]
 
+    # Add user message to session history
+    chat_sessions[session_id].append({"role": "user", "content": user_input})
 
-    
     state = {
-        "messages": [{"role": "user", "content": user_input}]
+        "messages": chat_sessions[session_id]
     }
-    updated_state = graph.invoke(state)
-    response = updated_state["messages"][-1]["content"]
 
-    return {"reply": response}
+    updated_state = graph.invoke(state)
+
+    # Add Alfred's reply to session
+    reply = updated_state["messages"][-1]["content"]
+    chat_sessions[session_id].append({"role": "assistant", "content": reply})
+
+    return {"reply": reply}
+
