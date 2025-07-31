@@ -128,3 +128,42 @@ async def vision_chat(body: dict = Body(...)):
 
     return {"reply": reply}
 
+from fastapi.responses import RedirectResponse
+from google_auth_oauthlib.flow import Flow
+from tools.calendar import store_token  # Pull in our tool’s token handler
+
+def get_google_flow():
+    return Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+                "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": ["https://the-vision-agent.onrender.com/oauth2callback"],
+            }
+        },
+        scopes=["https://www.googleapis.com/auth/calendar"],
+        redirect_uri="https://the-vision-agent.onrender.com/oauth2callback"
+    )
+
+@app.get("/auth")
+def authorize_user():
+    flow = get_google_flow()
+    auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline", include_granted_scopes="true")
+    return RedirectResponse(auth_url)
+
+@app.get("/oauth2callback")
+def oauth_callback(request: Request):
+    flow = get_google_flow()
+    flow.fetch_token(authorization_response=str(request.url))
+    creds = flow.credentials
+    store_token(creds.to_json())
+    return {"status": "✅ Authorization complete — Alfred can now access your calendar."}
+
+
+from tools.calendar import create_calendar_event
+
+@app.get("/test-calendar")
+def test_event():
+    return create_calendar_event("Alfred Test Call")
