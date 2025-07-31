@@ -150,16 +150,22 @@ def get_google_flow():
 @app.get("/auth")
 def authorize_user():
     flow = get_google_flow()
-    auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline", include_granted_scopes="true")
+    auth_url, _ = flow.authorization_url(
+        prompt="consent", access_type="offline", include_granted_scopes="true"
+    )
+    print("🔗 Redirecting user to:", auth_url)  # 👈 Add this
     return RedirectResponse(auth_url)
+
 
 @app.get("/oauth2callback")
 def oauth_callback(request: Request):
+    print("📥 Callback URL:", str(request.url))  # shows if `?code=...` is present
     flow = get_google_flow()
     flow.fetch_token(authorization_response=str(request.url))
     creds = flow.credentials
     store_token(creds.to_json())
     return {"status": "✅ Authorization complete — Alfred can now access your calendar."}
+
 
 
 from tools.calendar import create_calendar_event
