@@ -20,3 +20,10 @@ requests-oauthlib==2.0.0
 rsa==4.9.1
 uritemplate==4.2.0
 urllib3==2.5.0
+fastapi
+uvicorn
+python-dotenv
+openai
+langchain
+langgraph
+langchain-community
