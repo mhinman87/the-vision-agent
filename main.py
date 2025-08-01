@@ -15,6 +15,8 @@ from tools.calendar import create_calendar_event
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import MessagesState
 from langchain_core.messages import BaseMessage 
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage
 
 
 
@@ -81,7 +83,7 @@ llm_with_tools = llm.bind_tools(tools)
 def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
     response = llm_with_tools.invoke(state["messages"])
-    state["messages"].append({"role": "assistant", "content": response.content})
+    state["messages"].append(AIMessage(content=response.content))
     return state
 
 # --- Graph setup ---
@@ -120,7 +122,7 @@ if __name__ == "__main__":
         user_input = input("👤 You: ")
         if user_input.lower() == "exit":
             break
-        state["messages"].append({"role": "user", "content": user_input})
+        state["messages"].append(HumanMessage(content=user_input))
         state = graph.invoke(state)
 
 
