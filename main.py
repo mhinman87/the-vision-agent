@@ -17,6 +17,7 @@ from langgraph.graph import MessagesState
 from langchain_core.messages import BaseMessage 
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import AIMessage
+from langchain_core.messages import SystemMessage
 
 
 
@@ -46,11 +47,11 @@ def should_continue_chatting(state: AgentState) -> dict:
     recent_messages = state["messages"][-3:]
 
     response = classifier_llm.invoke([
-        {"role": "system", "content": """
-            You are deciding the next action for the user conversation. If the user has clearly asked to schedule a call *and* provided a date/time (or complete scheduling info), return 'schedule_call'. Otherwise, return 'chat'.
-            Respond only with the keyword: 'schedule_call' or 'chat'.
-            """}
-                ] + recent_messages)
+        SystemMessage(content="""
+    You are deciding the next action for the user conversation. If the user has clearly asked to schedule a call *and* provided a date/time (or complete scheduling info), return 'schedule_call'. Otherwise, return 'chat'.
+    Respond only with the keyword: 'schedule_call' or 'chat'.
+    """)
+    ] + recent_messages)
 
     decision = response.content.strip().lower()
     print(f"🔍 LLM decision: {decision}")
