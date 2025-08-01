@@ -18,6 +18,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import AIMessage
 from langchain_core.messages import SystemMessage
+from typing import Dict
+
 
 
 
@@ -36,10 +38,11 @@ class MessageRequest(BaseModel):
 
 
 class AgentState(TypedDict):
-    messages: List[BaseMessage]  # 👈 Not dicts anymore
+    messages: List[BaseMessage]
     classification: Optional[str]
-    next_action: Optional[str] 
-    form_data: Optional[dict] 
+    next_action: Optional[str]
+    form_data: Dict[str, Optional[str]]  # {'name': ..., 'datetime_str': ...}
+
 
 
 def should_continue_chatting(state: AgentState) -> dict:
