@@ -63,7 +63,10 @@ def should_continue_chatting(state: AgentState) -> dict:
 def run_booking_tool(state: AgentState) -> AgentState:
     print("📍 Node: run_booking_tool")
     try:
-        result = create_calendar_event()
+        name = state["form_data"].get("name")
+        datetime_str = state["form_data"].get("datetime_str")
+        print(f"✅ Booking event for {name} at {datetime_str}")
+        result = create_calendar_event(datetime_str, name)
         print(f"📆 Tool result: {result}")
         state["messages"].append(AIMessage(content=result))
     except Exception as e:
