@@ -1,37 +1,37 @@
 # tools/calendar.py
 
-import os
-import json
-from datetime import datetime, timedelta
-from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+import os
+from datetime import datetime, timedelta
 
-# In-memory token store (upgrade to persistent storage later)
-user_tokens = {}
+def load_credentials():
+    token_path = "token.json"
+    if not os.path.exists(token_path):
+        raise Exception("❌ No token.json found. Authorize first.")
+    creds = Credentials.from_authorized_user_file(token_path)
+    return creds
 
-# Use this to manually add the token from your /oauth2callback
-def store_token(token_json: str):
-    user_tokens["default"] = token_json
-
-def is_authorized():
-    return "default" in user_tokens
-
-def create_calendar_event(summary="GhostStack Call", start_time=None, duration_minutes=30):
-    if "default" not in user_tokens:
-        return "User is not authorized. Please visit /auth to connect your calendar."
-
-    creds = Credentials.from_authorized_user_info(json.loads(user_tokens["default"]))
+def create_calendar_event(title, start_time_str):
+    creds = load_credentials()
     service = build("calendar", "v3", credentials=creds)
 
-    if not start_time:
-        start_time = datetime.utcnow() + timedelta(days=1)
-    end_time = start_time + timedelta(minutes=duration_minutes)
+    # Parse start time
+    start_time = datetime.fromisoformat(start_time_str)
+    end_time = start_time + timedelta(minutes=30)
 
     event = {
-        "summary": summary,
-        "start": {"dateTime": start_time.isoformat() + "Z", "timeZone": "UTC"},
-        "end": {"dateTime": end_time.isoformat() + "Z", "timeZone": "UTC"},
+        'summary': title,
+        'start': {
+            'dateTime': start_time.isoformat(),
+            'timeZone': 'America/Chicago',  # Or use pytz if needed
+        },
+        'end': {
+            'dateTime': end_time.isoformat(),
+            'timeZone': 'America/Chicago',
+        },
     }
 
-    created_event = service.events().insert(calendarId="primary", body=event).execute()
-    return f"📅 Event created: {created_event.get('htmlLink')}"
+    created_event = service.events().insert(calendarId='primary', body=event).execute()
+    return {"status": f"✅ Event created: {created_event.get('htmlLink')}"}
+
