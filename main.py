@@ -37,6 +37,7 @@ class AgentState(TypedDict):
 # --- Define basic tools ---
 
 def alfred_booking_tool(state):
+    print("📍 Node: alfred_booking_tool")
     messages = state["messages"]
     last_message = messages[-1]["content"]
 
@@ -67,6 +68,7 @@ def decide_next_action(state: AgentState) -> AgentState:
     return state
 
 def should_continue_chatting(state: AgentState) -> dict:
+    print("📍 Node: should_continue_chatting")
     recent_messages = state["messages"][-3:]
 
     response = llm.invoke([
@@ -77,6 +79,7 @@ def should_continue_chatting(state: AgentState) -> dict:
                 ] + recent_messages)
 
     decision = response.content.strip().lower()
+    print(f"🔍 LLM decision: {decision}")
     return {"next": "schedule_call"} if "schedule_call" in decision else {"next": "chat"}
 
 
@@ -86,6 +89,7 @@ def should_continue_chatting(state: AgentState) -> dict:
 llm = ChatOpenAI(model="gpt-4o")
 
 def chat_with_user(state: AgentState) -> AgentState:
+    print("📍 Node: chat_with_user")
     response = llm.invoke(state["messages"])
     state["messages"].append({"role": "assistant", "content": response.content})
     return state
