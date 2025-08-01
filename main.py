@@ -19,6 +19,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import AIMessage
 from langchain_core.messages import SystemMessage
 from typing import Dict
+import json
 
 
 
@@ -85,24 +86,51 @@ classifier_llm = ChatOpenAI(model="gpt-4o")
 def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
     response = llm_with_tools.invoke(state["messages"])
-    
-    # Handle tool use
+
     if response.tool_calls:
         tool_call = response.tool_calls[0]
         args = tool_call.get("args", {})
 
-
-        # Save form data (optional if you want)
+        # Save to form_data
         state["form_data"] = args
 
-        # Call tool manually (optional but preferred for control/logging)
+        # Run tool manually
         result = create_calendar_event(**args)
         print(f"📆 Tool result: {result}")
         state["messages"].append(AIMessage(content=result))
     else:
         state["messages"].append(AIMessage(content=response.content))
 
+        # NEW: Attempt to extract info from chat
+        extraction_prompt = [
+            {"role": "system", "content": """
+                You're helping extract appointment info from conversation.
+                Check the latest messages and respond ONLY with JSON like this:
+
+                {
+                "name": "optional name",
+                "datetime_str": "optional datetime string"
+                }
+
+                Use null if nothing is found.
+                """}
+        ] + state["messages"][-3:]
+
+        try:
+            extraction_response = classifier_llm.invoke(extraction_prompt)
+            extracted = json.loads(extraction_response.content)
+            print(f"🔍 Extracted info: {extracted}")
+
+            # Merge any found values into form_data
+            if "name" in extracted and extracted["name"]:
+                state["form_data"]["name"] = extracted["name"]
+            if "datetime_str" in extracted and extracted["datetime_str"]:
+                state["form_data"]["datetime_str"] = extracted["datetime_str"]
+        except Exception as e:
+            print(f"⚠️ Extraction failed: {e}")
+
     return state
+
 
 
 # --- Graph setup ---
