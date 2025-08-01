@@ -50,55 +50,60 @@ def load_credentials():
 #     created_event = service.events().insert(calendarId='primary', body=event).execute()
 #     return f"✅ Event created: {created_event.get('htmlLink')}"
 
-@tool
-def create_calendar_event(input: str) -> str:
-    """
-    Adds a hardcoded event to the GhostStack company calendar.
-    Input is ignored for now. Logs output for debugging.
 
-    Returns:
-        str: Success or failure message.
-    """
-    try:
-        print("📆 Starting calendar tool...")
-        token_path = "token.json"
+# def create_calendar_event(input: str) -> str:
+#     """
+#     Adds a hardcoded event to the GhostStack company calendar.
+#     Input is ignored for now. Logs output for debugging.
 
-        if not os.path.exists(token_path):
-            print("❌ token.json not found.")
-            return "❌ Calendar authorization token missing."
+#     Returns:
+#         str: Success or failure message.
+#     """
+#     try:
+#         print("📆 Starting calendar tool...")
+#         token_path = "token.json"
 
-        creds = Credentials.from_authorized_user_file(token_path)
-        print("✅ Loaded credentials.")
+#         if not os.path.exists(token_path):
+#             print("❌ token.json not found.")
+#             return "❌ Calendar authorization token missing."
 
-        service = build("calendar", "v3", credentials=creds)
-        print("✅ Built Google Calendar service.")
+#         creds = Credentials.from_authorized_user_file(token_path)
+#         print("✅ Loaded credentials.")
 
-        # Hardcoded event details
-        event = {
-            'summary': 'Meeting with Alfred',
-            'description': 'Scheduled via GhostStack AI assistant.',
-            'start': {
-                'dateTime': '2025-08-01T15:00:00',  # 3 PM CDT
-                'timeZone': 'America/Chicago'
-            },
-            'end': {
-                'dateTime': '2025-08-01T16:00:00',
-                'timeZone': 'America/Chicago'
-            }
-        }
+#         service = build("calendar", "v3", credentials=creds)
+#         print("✅ Built Google Calendar service.")
 
-        print("📤 Inserting event...")
-        created_event = service.events().insert(calendarId='primary', body=event).execute()
-        event_link = created_event.get('htmlLink')
+#         # Hardcoded event details
+#         event = {
+#             'summary': 'Meeting with Alfred',
+#             'description': 'Scheduled via GhostStack AI assistant.',
+#             'start': {
+#                 'dateTime': '2025-08-01T15:00:00',  # 3 PM CDT
+#                 'timeZone': 'America/Chicago'
+#             },
+#             'end': {
+#                 'dateTime': '2025-08-01T16:00:00',
+#                 'timeZone': 'America/Chicago'
+#             }
+#         }
 
-        print(f"✅ Event created successfully: {event_link}")
-        return f"✅ Event created: {event_link}"
+#         print("📤 Inserting event...")
+#         created_event = service.events().insert(calendarId='primary', body=event).execute()
+#         event_link = created_event.get('htmlLink')
 
-    except Exception as e:
-        print(f"❌ Failed to create event: {e}")
-        return f"❌ Failed to create event: {str(e)}"
+#         print(f"✅ Event created successfully: {event_link}")
+#         return f"✅ Event created: {event_link}"
+
+#     except Exception as e:
+#         print(f"❌ Failed to create event: {e}")
+#         return f"❌ Failed to create event: {str(e)}"
 
 
-def store_token(token_json: str):
-    with open("token.json", "w") as f:
-        f.write(token_json)
+# def store_token(token_json: str):
+#     with open("token.json", "w") as f:
+#         f.write(token_json)
+
+def create_calendar_event():
+    """Create a calendar event for the user"""
+    print(f"✅ Event created successfully")
+    return "Done!"

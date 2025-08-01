@@ -35,42 +35,22 @@ class AgentState(TypedDict):
     next_action: Optional[str] 
     form_data: Optional[dict]   
 
-booking_tool_node = ToolNode([create_calendar_event])
 
-tools = [create_calendar_event]
 
-# --- Define basic tools ---
 
-# def alfred_booking_tool(state):
-#     print("📍 Node: alfred_booking_tool")
-#     messages = state["messages"]
-#     last_message = messages[-1]["content"]
 
-#     # Simple parser (replace with LangChain parsing later if needed)
-#     if "schedule" in last_message.lower():
-#         # Fallback time if no date/time was parsed yet
-#         form_data = {
-#             "title": "GhostStack Discovery Call",
-#             "datetime": "2025-08-01T14:00:00",
-#             "description": "Scheduled via Alfred"
-#         }
-#         result = create_calendar_event(form_data)
 
-#         messages.append({"role": "assistant", "content": result["status"]})
-#         return {**state, "messages": messages}
+# def decide_next_action(state: AgentState) -> AgentState:
+#     recent_messages = state["messages"][-3:]  # just a small chunk
+#     response = llm_with_tools.invoke([
+#         {"role": "system", "content": "Decide the user's intent. If they have clearly asked to book a meeting and provided details, set next_action to 'book_call'. Otherwise, set to 'chat'."},
+#         *recent_messages
+#     ])
+#     if "book_call" in response.content.lower():
+#         state["next_action"] = "book_call"
+#     else:
+#         state["next_action"] = "chat"
 #     return state
-
-def decide_next_action(state: AgentState) -> AgentState:
-    recent_messages = state["messages"][-3:]  # just a small chunk
-    response = llm_with_tools.invoke([
-        {"role": "system", "content": "Decide the user's intent. If they have clearly asked to book a meeting and provided details, set next_action to 'book_call'. Otherwise, set to 'chat'."},
-        *recent_messages
-    ])
-    if "book_call" in response.content.lower():
-        state["next_action"] = "book_call"
-    else:
-        state["next_action"] = "chat"
-    return state
 
 def should_continue_chatting(state: AgentState) -> dict:
     print("📍 Node: should_continue_chatting")
@@ -92,6 +72,7 @@ def should_continue_chatting(state: AgentState) -> dict:
 
 # --- Define the LLM chat node ---
 llm = ChatOpenAI(model="gpt-4o")
+tools = [create_calendar_event]
 llm_with_tools = llm.bind_tools(tools)
 
 def chat_with_user(state: AgentState) -> AgentState:
@@ -103,6 +84,8 @@ def chat_with_user(state: AgentState) -> AgentState:
 # --- Graph setup ---
 builder = StateGraph(AgentState)
 
+#---- Nodes ----
+booking_tool_node = ToolNode([create_calendar_event])
 builder.add_node("chat", chat_with_user)
 # builder.add_node("schedule_call", alfred_booking_tool)
 builder.add_node("schedule_call", booking_tool_node)
