@@ -83,7 +83,8 @@ def chat_with_user(state: AgentState) -> AgentState:
     # Handle tool use
     if response.tool_calls:
         tool_call = response.tool_calls[0]
-        args = tool_call.args
+        args = tool_call.get("args", {})
+
 
         # Save form data (optional if you want)
         state["form_data"] = args
