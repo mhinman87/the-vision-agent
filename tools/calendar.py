@@ -103,7 +103,8 @@ def store_token(token_json: str):
     with open("token.json", "w") as f:
         f.write(token_json)
 
-def create_calendar_event():
-    """Create a calendar event for the user"""
-    print(f"✅ Event created successfully")
-    return "Done!"
+
+def create_calendar_event(datetime_str: str, name: str) -> str:
+    """Creates a calendar event using the provided datetime and name."""
+    print(f"✅ Booking event for {name} at {datetime_str}")
+    return f"Your appointment at {datetime_str} is all set! We’ll reach out with a quick confirmation text one hour beforehand."

@@ -79,8 +79,24 @@ classifier_llm = ChatOpenAI(model="gpt-4o")
 def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
     response = llm_with_tools.invoke(state["messages"])
-    state["messages"].append(AIMessage(content=response.content))
+    
+    # Handle tool use
+    if response.tool_calls:
+        tool_call = response.tool_calls[0]
+        args = tool_call.args
+
+        # Save form data (optional if you want)
+        state["form_data"] = args
+
+        # Call tool manually (optional but preferred for control/logging)
+        result = create_calendar_event(**args)
+        print(f"📆 Tool result: {result}")
+        state["messages"].append(AIMessage(content=result))
+    else:
+        state["messages"].append(AIMessage(content=response.content))
+
     return state
+
 
 # --- Graph setup ---
 builder = StateGraph(AgentState)
