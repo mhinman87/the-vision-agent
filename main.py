@@ -5,7 +5,7 @@ load_dotenv()
 # main.py
 import os
 from langgraph.graph import StateGraph, END
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 # from langgraph.checkpoint.sqlite import SqliteSaver
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
