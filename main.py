@@ -13,6 +13,9 @@ import uvicorn
 from collections import defaultdict
 from tools.calendar import create_calendar_event
 from langgraph.prebuilt import ToolNode
+from langgraph.graph import MessagesState
+from langchain_core.messages import BaseMessage 
+
 
 
 
@@ -30,10 +33,10 @@ class MessageRequest(BaseModel):
 
 
 class AgentState(TypedDict):
-    messages: List[dict]
+    messages: List[BaseMessage]  # 👈 Not dicts anymore
     classification: Optional[str]
     next_action: Optional[str] 
-    form_data: Optional[dict]   
+    form_data: Optional[dict] 
 
 
 
