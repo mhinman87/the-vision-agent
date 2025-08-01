@@ -45,7 +45,7 @@ def should_continue_chatting(state: AgentState) -> dict:
     print("📍 Node: should_continue_chatting")
     recent_messages = state["messages"][-3:]
 
-    response = llm_with_tools.invoke([
+    response = classifier_llm.invoke([
         {"role": "system", "content": """
             You are deciding the next action for the user conversation. If the user has clearly asked to schedule a call *and* provided a date/time (or complete scheduling info), return 'schedule_call'. Otherwise, return 'chat'.
             Respond only with the keyword: 'schedule_call' or 'chat'.
@@ -73,6 +73,7 @@ def run_booking_tool(state: AgentState) -> AgentState:
 llm = ChatOpenAI(model="gpt-4o")
 tools = [create_calendar_event]
 llm_with_tools = llm.bind_tools(tools)
+classifier_llm = ChatOpenAI(model="gpt-4o") 
 
 def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
