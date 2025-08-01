@@ -91,29 +91,40 @@ def chat_with_user(state: AgentState) -> AgentState:
         tool_call = response.tool_calls[0]
         args = tool_call.get("args", {})
 
-        # Save to form_data
+        # Save args to form_data
         state["form_data"] = args
 
-        # Run tool manually
-        result = create_calendar_event(**args)
-        print(f"📆 Tool result: {result}")
-        state["messages"].append(AIMessage(content=result))
+        # ✅ Check for required fields
+        if args.get("datetime_str") and args.get("name"):
+            result = create_calendar_event(**args)
+            print(f"📆 Tool result: {result}")
+            state["messages"].append(AIMessage(content=result))
+        else:
+            print("⏳ Missing info. Tool call skipped.")
+            # Add an LLM message to ask for missing info
+            missing = []
+            if not args.get("datetime_str"):
+                missing.append("date and time")
+            if not args.get("name"):
+                missing.append("your name")
+            ask_msg = f"Got it! Just need {', and '.join(missing)} before I can book your appointment."
+            state["messages"].append(AIMessage(content=ask_msg))
+
     else:
         state["messages"].append(AIMessage(content=response.content))
 
-        # NEW: Attempt to extract info from chat
+        # Try to extract form data from plain chat
         extraction_prompt = [
             {"role": "system", "content": """
-                You're helping extract appointment info from conversation.
-                Check the latest messages and respond ONLY with JSON like this:
+Extract appointment info in JSON format like this:
 
-                {
-                "name": "optional name",
-                "datetime_str": "optional datetime string"
-                }
+{
+  "name": "optional name",
+  "datetime_str": "optional datetime string"
+}
 
-                Use null if nothing is found.
-                """}
+Use null if nothing is found.
+"""}
         ] + state["messages"][-3:]
 
         try:
@@ -121,15 +132,36 @@ def chat_with_user(state: AgentState) -> AgentState:
             extracted = json.loads(extraction_response.content)
             print(f"🔍 Extracted info: {extracted}")
 
-            # Merge any found values into form_data
+            state["form_data"] = state.get("form_data", {})
+
             if "name" in extracted and extracted["name"]:
                 state["form_data"]["name"] = extracted["name"]
             if "datetime_str" in extracted and extracted["datetime_str"]:
                 state["form_data"]["datetime_str"] = extracted["datetime_str"]
+
+            # 🧠 If both are now present, run the tool
+            if state["form_data"].get("name") and state["form_data"].get("datetime_str"):
+                result = create_calendar_event(
+                    name=state["form_data"]["name"],
+                    datetime_str=state["form_data"]["datetime_str"]
+                )
+                print(f"📆 Tool result: {result}")
+                state["messages"].append(AIMessage(content=result))
+            else:
+                # Ask for what’s missing
+                missing = []
+                if not state["form_data"].get("datetime_str"):
+                    missing.append("date and time")
+                if not state["form_data"].get("name"):
+                    missing.append("your name")
+                ask_msg = f"No problem! I just need {', and '.join(missing)} to book your appointment."
+                state["messages"].append(AIMessage(content=ask_msg))
+
         except Exception as e:
             print(f"⚠️ Extraction failed: {e}")
 
     return state
+
 
 
 
