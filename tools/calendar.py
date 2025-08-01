@@ -99,9 +99,9 @@ def load_credentials():
 #         return f"❌ Failed to create event: {str(e)}"
 
 
-# def store_token(token_json: str):
-#     with open("token.json", "w") as f:
-#         f.write(token_json)
+def store_token(token_json: str):
+    with open("token.json", "w") as f:
+        f.write(token_json)
 
 def create_calendar_event():
     """Create a calendar event for the user"""
