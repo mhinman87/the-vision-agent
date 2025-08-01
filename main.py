@@ -107,8 +107,8 @@ builder.add_conditional_edges(
     "should_continue_chatting",
     lambda state: state["next"],
     {
-        "chat": "chat",
-        "schedule_call": "schedule_call"
+        "schedule_call": "schedule_call",
+        "chat": END  
     }
 )
 builder.add_edge("schedule_call", END)
