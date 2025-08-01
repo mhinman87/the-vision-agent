@@ -66,6 +66,20 @@ def decide_next_action(state: AgentState) -> AgentState:
         state["next_action"] = "chat"
     return state
 
+def should_continue_chatting(state: AgentState) -> dict:
+    recent_messages = state["messages"][-3:]
+
+    response = llm.invoke([
+        {"role": "system", "content": """
+            You are deciding the next action for the user conversation. If the user has clearly asked to schedule a call *and* provided a date/time (or complete scheduling info), return 'schedule_call'. Otherwise, return 'chat'.
+            Respond only with the keyword: 'schedule_call' or 'chat'.
+            """}
+                ] + recent_messages)
+
+    decision = response.content.strip().lower()
+    return {"next": "schedule_call"} if "schedule_call" in decision else {"next": "chat"}
+
+
 
 
 # --- Define the LLM chat node ---
@@ -78,25 +92,23 @@ def chat_with_user(state: AgentState) -> AgentState:
 
 # --- Graph setup ---
 builder = StateGraph(AgentState)
+
 builder.add_node("chat", chat_with_user)
 builder.add_node("schedule_call", alfred_booking_tool)
-builder.add_node("decide", decide_next_action)
-
-def route_action(state: AgentState):
-    return state["next_action"]
+builder.add_node("should_continue_chatting", should_continue_chatting)
 
 builder.set_entry_point("chat")
-builder.add_edge("chat", "decide")  # instead of "classify"
+builder.add_edge("chat", "should_continue_chatting")
 builder.add_conditional_edges(
-    "decide",
-    route_action,
+    "should_continue_chatting",
+    lambda state: state["next"],
     {
-        "book_call": "schedule_call",
         "chat": "chat",
+        "schedule_call": "schedule_call"
     }
 )
-builder.add_edge("chat", END)
 builder.add_edge("schedule_call", END)
+
 
 
 graph = builder.compile()
@@ -209,4 +221,9 @@ def oauth_callback(request: Request):
 
 @app.get("/test-calendar")
 def test_event():
-    return create_calendar_event("Alfred Test Call")
+    return create_calendar_event({
+    "title": "Alfred Test Call",
+    "datetime": "2025-08-01T15:00:00",
+    "description": "Created from /test-calendar endpoint"
+        })
+
