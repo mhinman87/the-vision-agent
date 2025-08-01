@@ -35,3 +35,6 @@ def create_calendar_event(form_data):
     created_event = service.events().insert(calendarId='primary', body=event).execute()
     return {"status": f"✅ Event created: {created_event.get('htmlLink')}"}
 
+def store_token(token_json: str):
+    with open("token.json", "w") as f:
+        f.write(token_json)
