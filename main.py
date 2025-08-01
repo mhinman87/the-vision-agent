@@ -174,7 +174,7 @@ async def vision_chat(body: dict = Body(...)):
     updated_state = graph.invoke(state)
 
     # Add Alfred's reply to session
-    reply = updated_state["messages"][-1]["content"]
+    reply = updated_state["messages"][-1].content
     chat_sessions[session_id].append({"role": "assistant", "content": reply})
 
     return {"reply": reply}
