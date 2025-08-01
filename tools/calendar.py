@@ -3,7 +3,8 @@
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import os
-from datetime import datetime, timedelta
+import datetime
+
 
 def load_credentials():
     token_path = "token.json"
@@ -12,24 +13,23 @@ def load_credentials():
     creds = Credentials.from_authorized_user_file(token_path)
     return creds
 
-def create_calendar_event(title, start_time_str):
-    creds = load_credentials()
+def create_calendar_event(form_data):
+    creds = None
+    if os.path.exists("token.json"):
+        creds = Credentials.from_authorized_user_file("token.json")
+
     service = build("calendar", "v3", credentials=creds)
 
-    # Parse start time
-    start_time = datetime.fromisoformat(start_time_str)
-    end_time = start_time + timedelta(minutes=30)
+    # Default fallback values
+    title = form_data.get("title", "Meeting with Alfred")
+    datetime_str = form_data.get("datetime", datetime.datetime.utcnow().isoformat() + "Z")
+    description = form_data.get("description", "Scheduled via GhostStack AI assistant.")
 
     event = {
         'summary': title,
-        'start': {
-            'dateTime': start_time.isoformat(),
-            'timeZone': 'America/Chicago',  # Or use pytz if needed
-        },
-        'end': {
-            'dateTime': end_time.isoformat(),
-            'timeZone': 'America/Chicago',
-        },
+        'description': description,
+        'start': {'dateTime': datetime_str, 'timeZone': 'America/Chicago'},
+        'end': {'dateTime': datetime_str, 'timeZone': 'America/Chicago'},  # ❗ temporary — no duration yet
     }
 
     created_event = service.events().insert(calendarId='primary', body=event).execute()

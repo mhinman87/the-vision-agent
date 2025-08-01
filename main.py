@@ -11,6 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from collections import defaultdict
+from tools.calendar import create_calendar_event
+
 
 chat_sessions = defaultdict(list)
 
@@ -28,19 +30,43 @@ class MessageRequest(BaseModel):
 class AgentState(TypedDict):
     messages: List[dict]
     classification: Optional[str]
+    next_action: Optional[str]  # 👈 new field
+    form_data: Optional[dict]   # 👈 optional, for when user fills out info
+
 
 # --- Define basic tools ---
-def classify_intent(state: AgentState) -> AgentState:
-    last_message = state["messages"][-1]["content"]
-    # simple mock classifier
-    if "contract" in last_message.lower():
-        classification = "Contract Review Agent"
-    elif "estimate" in last_message.lower():
-        classification = "Estimating Agent"
+
+def alfred_booking_tool(state):
+    messages = state["messages"]
+    last_message = messages[-1]["content"]
+
+    # Simple parser (replace with LangChain parsing later if needed)
+    if "schedule" in last_message.lower():
+        # Fallback time if no date/time was parsed yet
+        form_data = {
+            "title": "GhostStack Discovery Call",
+            "datetime": "2025-08-01T14:00:00",
+            "description": "Scheduled via Alfred"
+        }
+        result = create_calendar_event(form_data)
+
+        messages.append({"role": "assistant", "content": result["status"]})
+        return {**state, "messages": messages}
+    return state
+
+def decide_next_action(state: AgentState) -> AgentState:
+    recent_messages = state["messages"][-3:]  # just a small chunk
+    response = llm.invoke([
+        {"role": "system", "content": "Decide the user's intent. If they have clearly asked to book a meeting and provided details, set next_action to 'book_call'. Otherwise, set to 'chat'."},
+        *recent_messages
+    ])
+    if "book_call" in response.content.lower():
+        state["next_action"] = "book_call"
     else:
-        classification = "General Inquiry"
-    print(f"[🧠 CLASSIFIED] {classification}")
-    return {**state, "classification": classification}
+        state["next_action"] = "chat"
+    return state
+
+
 
 # --- Define the LLM chat node ---
 llm = ChatOpenAI(model="gpt-4o")
@@ -54,11 +80,24 @@ def chat_with_user(state: AgentState) -> AgentState:
 # --- Graph setup ---
 builder = StateGraph(AgentState)
 builder.add_node("chat", chat_with_user)
-builder.add_node("classify", classify_intent)
+builder.add_node("schedule_call", alfred_booking_tool)
+builder.add_node("decide", decide_next_action)
+
+def route_action(state: AgentState):
+    return state["next_action"]
 
 builder.set_entry_point("chat")
-builder.add_edge("chat", "classify")
-builder.add_edge("classify", END)
+builder.add_edge("chat", "decide")  # instead of "classify"
+builder.add_conditional_edges(
+    "decide",
+    route_action,
+    {
+        "book_call": "schedule_call",
+        "chat": "chat",
+    }
+)
+builder.add_edge("schedule_call", END)
+
 
 graph = builder.compile()
 
@@ -167,8 +206,6 @@ def oauth_callback(request: Request):
     return {"status": "✅ Authorization complete — Alfred can now access your calendar."}
 
 
-
-from tools.calendar import create_calendar_event
 
 @app.get("/test-calendar")
 def test_event():
