@@ -73,7 +73,6 @@ llm = ChatOpenAI(model="gpt-4o")
 
 def chat_with_user(state: AgentState) -> AgentState:
     response = llm.invoke(state["messages"])
-    print(f"[🤖 VISION]: {response.content}")
     state["messages"].append({"role": "assistant", "content": response.content})
     return state
 
@@ -96,6 +95,7 @@ builder.add_conditional_edges(
         "chat": "chat",
     }
 )
+builder.add_edge("chat", END)
 builder.add_edge("schedule_call", END)
 
 
