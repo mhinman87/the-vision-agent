@@ -96,7 +96,9 @@ def should_continue_chatting(state: AgentState) -> dict:
 
         Respond ONLY with the word: 'schedule_call' or 'chat'.
                       
-        Most times you are going to reply with 'chat' 
+        Most times you are going to reply with 'chat' - probably 95 out of 100 times you will respond with 'chat'
+                      
+        Only time you will respond with 'schedule_call' is if the user is asking to get in touch with a human
     """)
     ] + recent_messages)
 
