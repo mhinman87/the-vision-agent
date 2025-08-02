@@ -133,58 +133,60 @@ def chat_with_user(state: AgentState) -> AgentState:
     response = llm_with_tools.invoke(state["messages"])
 
     if response.tool_calls:
-        # Handle tool call as before...
-        ...
-    else:
+        # You can handle tool calls here if needed
+        print("🛠️ Tool call detected — skipping extraction.")
         ai_msg = response.content.strip()
-
-        # Push the assistant reply
         state["messages"].append(AIMessage(content=ai_msg))
+        return state
 
-        # Try extracting name/datetime, but DO NOT assume booking yet
-        extraction_prompt = [
-            SystemMessage(content="""
-                Extract name and datetime from the conversation. 
-                Respond in JSON like:
-                {"name": "Max", "datetime_str": "August 3rd at 5p"}
+    # --- Default message behavior ---
+    ai_msg = response.content.strip()
+    state["messages"].append(AIMessage(content=ai_msg))
 
-                Use null for any missing values.
-            """)
-        ] + state["messages"][-3:]
+    # --- Try extracting booking info even if no tool was called ---
+    extraction_prompt = [
+        SystemMessage(content="""
+            Extract name and datetime from the conversation. 
+            Respond in JSON like:
+            {"name": "Max", "datetime_str": "August 3rd at 5p"}
 
-        try:
-            extracted = json.loads(classifier_llm.invoke(extraction_prompt).content)
-            print(f"🔍 Extracted info: {extracted}")
+            Use null for any missing values.
+        """)
+    ] + state["messages"][-3:]
 
-            # Save to form_data
-            state["form_data"].update({
-                k: v for k, v in extracted.items() if v
-            })
+    try:
+        extraction_response = classifier_llm.invoke(extraction_prompt)
+        extracted = json.loads(extraction_response.content)
+        print(f"🔍 Extracted info: {extracted}")
 
-            # Only suggest booking if both values are available
-            if state["form_data"].get("name") and state["form_data"].get("datetime_str"):
-                result = create_calendar_event(
-                    name=state["form_data"]["name"],
-                    datetime_str=state["form_data"]["datetime_str"]
-                )
-                state["messages"].append(AIMessage(content=result))
-            elif extracted["datetime_str"] or extracted["name"]:
-                missing = []
-                if not extracted.get("name"):
-                    missing.append("your name")
-                if not extracted.get("datetime_str"):
-                    missing.append("date and time")
-                ask_msg = f"Got it! Just need {', and '.join(missing)} to finish booking."
-                state["messages"].append(AIMessage(content=ask_msg))
+        # Initialize form_data if needed
+        state["form_data"] = state.get("form_data", {})
 
-        except Exception as e:
-            print(f"⚠️ Extraction failed: {e}")
-            # Skip booking entirely if extraction failed
+        for key in ("name", "datetime_str"):
+            if extracted.get(key):
+                state["form_data"][key] = extracted[key]
+
+        name = state["form_data"].get("name")
+        datetime_str = state["form_data"].get("datetime_str")
+
+        if name and datetime_str:
+            result = create_calendar_event(name=name, datetime_str=datetime_str)
+            state["messages"].append(AIMessage(content=result))
+        elif name or datetime_str:
+            missing = []
+            if not name:
+                missing.append("your name")
+            if not datetime_str:
+                missing.append("date and time")
+            ask_msg = f"No problem! I just need {', and '.join(missing)} to book your appointment."
+            state["messages"].append(AIMessage(content=ask_msg))
+        else:
+            print("ℹ️ Not enough info to attempt booking yet.")
+
+    except Exception as e:
+        print(f"⚠️ Extraction failed: {e}")
 
     return state
-
-
-
 
 
 # --- Graph setup ---
