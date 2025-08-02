@@ -20,19 +20,20 @@ from langchain_core.messages import AIMessage
 from langchain_core.messages import SystemMessage
 from typing import Dict
 import json
+from typing import TypedDict, List, Optional
+
+from pydantic import BaseModel
 
 
 
 
 
-chat_sessions = defaultdict(list)
+
 
 
 
 # --- Define the agent state ---
-from typing import TypedDict, List, Optional
 
-from pydantic import BaseModel
 
 class MessageRequest(BaseModel):
     message: str
@@ -42,7 +43,43 @@ class AgentState(TypedDict):
     messages: List[BaseMessage]
     classification: Optional[str]
     next_action: Optional[str]
-    form_data: Dict[str, Optional[str]]  # {'name': ..., 'datetime_str': ...}
+    form_data: Dict[str, Optional[str]] 
+
+
+chat_sessions: Dict[str, AgentState] = defaultdict(lambda: {
+    "messages": [SystemMessage(content="""You are Alfred, the helpful AI assistant for GhostStack — a company that builds custom AI agents for small businesses.
+
+    🎯 Your role is to:
+    - Greet visitors and explain what GhostStack does.
+    - Help them understand how AI can solve real problems in their business.
+    - Listen to their pain points, ask smart follow-up questions, and suggest practical automation solutions.
+    - Offer to schedule a quick call with Max (the founder) when appropriate.
+
+    🧠 GhostStack offers:
+    - Prebuilt AI agents (email sorting, contract review, lead qualification, etc.)
+    - Fully custom agents that integrate with a business’s APIs or tools
+    - Full-service setup: frontend chat, backend logic, calendar, email, and more
+
+    💬 Your style:
+    - Clear, brief, and confident. No long paragraphs.
+    - Technically competent, but never overly casual or robotic.
+    - Never guess or hallucinate info — ask for clarification if needed.
+    - Never answer general knowledge questions — redirect back to business problems and GhostStack services.
+
+    📆 Scheduling:
+    If a user gives you both a name and a clear date/time, use the `create_calendar_event` tool.
+    If info is missing, politely ask for it and wait.
+
+    Never say you're ChatGPT or mention OpenAI.
+    Only talk about GhostStack and how it can help small businesses automate workflows using AI.
+
+
+    """)],
+    "classification": None,
+    "next_action": None,
+    "form_data": {}
+})
+
 
 
 
@@ -116,15 +153,15 @@ def chat_with_user(state: AgentState) -> AgentState:
         # Try to extract form data from plain chat
         extraction_prompt = [
             {"role": "system", "content": """
-Extract appointment info in JSON format like this:
+            Extract appointment info in JSON format like this:
 
-{
-  "name": "optional name",
-  "datetime_str": "optional datetime string"
-}
+            {
+            "name": "optional name",
+            "datetime_str": "optional datetime string"
+            }
 
-Use null if nothing is found.
-"""}
+            Use null if nothing is found.
+            """}
         ] + state["messages"][-3:]
 
         try:
@@ -222,41 +259,26 @@ app.add_middleware(
 from fastapi import Body
 
 @app.post("/vision")
-async def vision_chat(body: dict = Body(...)):
-    session_id = body.get("session_id", "default")
+async def vision_chat(request: Request, body: dict = Body(...)):
+    session_id = body.get("session_id") or request.client.host
     user_input = body["message"]
 
-    # Add user message to session history
-    chat_sessions[session_id].append({"role": "user", "content": user_input})
+    # Retrieve per-session AgentState
+    state = chat_sessions[session_id]
 
-    system_message = {
-        "role": "system",
-        "content": """You are Alfred, the helpful AI assistant for GhostStack — a company that builds custom AI agents for small businesses. Your job is to greet visitors, understand their needs, and explain how GhostStack can help automate workflows using advanced AI.
+    # Append user message to AgentState
+    state["messages"].append(HumanMessage(content=user_input))
 
-            GhostStack offers:
-            - Prebuilt agents for quick deployment (like email sorting, contract review, or lead qualification)
-            - Fully custom agents tailored to a business’s unique tools or APIs
-            - Full-service integration (including backend APIs and frontend chat interfaces)
-
-            Your tone is clear, calm, and technically competent. You are not pushy or salesy. You are conversational, but focused. If someone asks about pricing, you explain that pricing starts with a setup fee followed by a low monthly subscription, and they can request a custom quote for more complex work.
-
-            Always refer to yourself as “Alfred.” Never say you are ChatGPT or built by OpenAI.
-
-            If you don’t know the answer, offer to collect the user’s contact info and promise a human will follow up.
-            """
-    }
-
-    state = {
-        "messages": [system_message] + chat_sessions[session_id]
-    }
-
+    # Run the graph
     updated_state = graph.invoke(state)
 
-    # Add Alfred's reply to session
+    # Append assistant reply
     reply = updated_state["messages"][-1].content
-    chat_sessions[session_id].append({"role": "assistant", "content": reply})
+    chat_sessions[session_id]["messages"].append(AIMessage(content=reply))
 
     return {"reply": reply}
+
+
 
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
