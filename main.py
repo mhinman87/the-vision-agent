@@ -82,31 +82,49 @@ chat_sessions: Dict[str, AgentState] = defaultdict(lambda: {
 
 def should_continue_chatting(state: AgentState) -> dict:
     print("📍 Node: should_continue_chatting")
-    recent_messages = state["messages"][-3:]
 
+    name = state.get("form_data", {}).get("name")
+    datetime_str = state.get("form_data", {}).get("datetime_str")
+
+    # ✅ Only continue to booking if we have both
+    if not (name and datetime_str):
+        print("🛑 Missing info — keep chatting.")
+        return {"next": "chat"}
+
+    recent_messages = state["messages"][-3:]
     response = classifier_llm.invoke([
         SystemMessage(content="""
-        You are deciding the next action for the user conversation.
+            You are deciding the next action in a conversation.
 
-        If the user has shown interest in scheduling a call (even without full details like name or time), return 'schedule_call'. Otherwise, return 'chat'.
+            Reply ONLY with: 'schedule_call' or 'chat'.
 
-        Respond ONLY with the word: 'schedule_call' or 'chat'.
-                      
-        Most times you are going to reply with 'chat' - probably 95 out of 100 times you will respond with 'chat'
-                      
-        Only time you will respond with 'schedule_call' is if the user is asking to get in touch with a human
-    """)
+            Respond with 'schedule_call' ONLY if the user clearly asks to schedule, book, or set up a time to talk.
+
+            Examples of 'schedule_call':
+            - "Can I schedule a call?"
+            - "I'd like to talk to someone."
+            - "How do I book a time?"
+
+            If the user is asking questions, chatting, or learning more, respond with 'chat'.
+        """)
     ] + recent_messages)
 
     decision = response.content.strip().lower()
     print(f"🔍 LLM decision: {decision}")
-    return {"next": "schedule_call"} if "schedule_call" in decision else {"next": "chat"}
+    return {"next": "schedule_call"} if decision == "schedule_call" else {"next": "chat"}
+
 
 def run_booking_tool(state: AgentState) -> AgentState:
     print("📍 Node: run_booking_tool")
+    name = state.get("form_data", {}).get("name")
+    datetime_str = state.get("form_data", {}).get("datetime_str")
+
+    if not name or not datetime_str:
+        print("⚠️ Missing booking info — skipping tool call.")
+        state["messages"].append(AIMessage(content="Before I can book your appointment, I just need your name and a time that works for you."))
+        return state
+
     try:
-        name = state["form_data"].get("name")
-        datetime_str = state["form_data"].get("datetime_str")
         print(f"✅ Booking event for {name} at {datetime_str}")
         result = create_calendar_event(datetime_str, name)
         print(f"📆 Tool result: {result}")
@@ -114,7 +132,9 @@ def run_booking_tool(state: AgentState) -> AgentState:
     except Exception as e:
         print(f"❌ Tool failed: {str(e)}")
         state["messages"].append(AIMessage(content="Sorry, I had trouble scheduling the event."))
+
     return state
+
 
 
 
@@ -126,25 +146,19 @@ classifier_llm = ChatOpenAI(model="gpt-4o")
 
 def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
+
     response = llm_with_tools.invoke(state["messages"])
 
-    if response.tool_calls:
-        # You can handle tool calls here if needed
-        print("🛠️ Tool call detected — skipping extraction.")
-        ai_msg = response.content.strip()
-        state["messages"].append(AIMessage(content=ai_msg))
-        return state
-
-    # --- Default message behavior ---
+    # Always show the LLM reply
     ai_msg = response.content.strip()
     state["messages"].append(AIMessage(content=ai_msg))
 
-    # --- Try extracting booking info even if no tool was called ---
+    # --- Extract name and datetime for booking ---
     extraction_prompt = [
         SystemMessage(content="""
-            Extract name and datetime from the conversation. 
-            Respond in JSON like:
-            {"name": "Max", "datetime_str": "August 3rd at 5p"}
+            Extract name and datetime from the conversation.
+            Reply in JSON format like:
+            {"name": "Max", "datetime_str": "August 3rd at 5pm"}
 
             Use null for any missing values.
         """)
@@ -155,34 +169,18 @@ def chat_with_user(state: AgentState) -> AgentState:
         extracted = json.loads(extraction_response.content)
         print(f"🔍 Extracted info: {extracted}")
 
-        # Initialize form_data if needed
+        # Ensure form_data exists
         state["form_data"] = state.get("form_data", {})
 
         for key in ("name", "datetime_str"):
             if extracted.get(key):
                 state["form_data"][key] = extracted[key]
 
-        name = state["form_data"].get("name")
-        datetime_str = state["form_data"].get("datetime_str")
-
-        if name and datetime_str:
-            result = create_calendar_event(name=name, datetime_str=datetime_str)
-            state["messages"].append(AIMessage(content=result))
-        elif name or datetime_str:
-            missing = []
-            if not name:
-                missing.append("your name")
-            if not datetime_str:
-                missing.append("date and time")
-            ask_msg = f"No problem! I just need {', and '.join(missing)} to book your appointment."
-            state["messages"].append(AIMessage(content=ask_msg))
-        else:
-            print("ℹ️ Not enough info to attempt booking yet.")
-
     except Exception as e:
         print(f"⚠️ Extraction failed: {e}")
 
     return state
+
 
 
 # --- Graph setup ---
