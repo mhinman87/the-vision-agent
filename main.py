@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 
 
-
+appointments_by_name = {}
 
 
 # --- Define the agent state ---
@@ -158,11 +158,24 @@ def run_booking_tool(state: AgentState) -> AgentState:
         print(f"📆 Tool result: {result}")
         state["messages"].append(AIMessage(content=result))
 
+        # 🧠 Save appointment globally
+        appointments_by_name[name] = {
+            "datetime_str": datetime_str,
+            "business_name": business_name,
+            "address": address,
+            "contact": phone or email
+        }
+        print(f"🗃️ Saved appointment for {name}: {appointments_by_name[name]}")
+
+        # 🎒 Clear backpack
+        state["form_data"] = {}
+
     except Exception as e:
         print(f"❌ Tool failed: {str(e)}")
         state["messages"].append(AIMessage(content="Sorry, I had trouble scheduling the event."))
 
     return state
+
 
 
 
