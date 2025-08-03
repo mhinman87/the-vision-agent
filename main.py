@@ -178,17 +178,56 @@ classifier_llm = ChatOpenAI(model="gpt-4o")
 def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
 
+    # Chat as usual
     response = llm_with_tools.invoke(state["messages"])
     ai_msg = response.content.strip()
     state["messages"].append(AIMessage(content=ai_msg))
 
-    # Initialize form_data if missing
+    # Prep form_data
     state["form_data"] = state.get("form_data", {})
 
-    # Manually update form_data by looking for known fields in the LLM's reply (for now this is placeholder logic)
-    # You can later use regex, patterns, or entity extraction here if needed
+    # Get latest human message
+    last_user_message = ""
+    for msg in reversed(state["messages"]):
+        if msg.type == "human":
+            last_user_message = msg.content
+            break
+
+    # Ask LLM to extract only the fields from this one message
+    extract_prompt = [
+        SystemMessage(content="""
+                You are helping extract appointment booking info.
+
+                Look at the single message below and return a Python dictionary of any fields it includes:
+
+                - name
+                - datetime_str
+                - business_name
+                - address
+                - phone
+                - email
+
+                Only return fields that are clearly present in the message.
+                Leave out anything missing. No explanation.
+                Return only a valid Python dict.
+        """),
+        HumanMessage(content=last_user_message)
+    ]
+
+    try:
+        extract_response = llm_with_tools.invoke(extract_prompt)
+        print("🧠 LLM extracted:", extract_response.content)
+        extracted = eval(extract_response.content)
+
+        for key, value in extracted.items():
+            if value:
+                state["form_data"][key] = value
+
+    except Exception as e:
+        print(f"⚠️ Extraction failed: {e}")
 
     return state
+
 
 
 # --- Graph setup ---
