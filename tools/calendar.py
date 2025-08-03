@@ -5,6 +5,8 @@ from googleapiclient.discovery import build
 import os
 import datetime
 from langchain.tools import tool
+from typing import Optional
+
 
 
 def load_credentials():
@@ -104,7 +106,42 @@ def store_token(token_json: str):
         f.write(token_json)
 
 
-def create_calendar_event(datetime_str: str, name: str) -> str:
-    """Creates a calendar event using the provided datetime and name."""
+def create_calendar_event(
+    datetime_str: Optional[str],
+    name: Optional[str],
+    business_name: Optional[str],
+    address: Optional[str],
+    phone: Optional[str],
+    email: Optional[str]
+) -> str:
+    """Simulates creating a calendar event and returns a confirmation message."""
+
+    # Validate required fields
+    missing_fields = []
+    if not datetime_str:
+        missing_fields.append("datetime")
+    if not name:
+        missing_fields.append("name")
+    if not business_name:
+        missing_fields.append("business name")
+    if not address:
+        missing_fields.append("address")
+    if not (phone or email):
+        missing_fields.append("phone or email")
+
+    if missing_fields:
+        print(f"❌ Missing fields for booking: {missing_fields}")
+        return f"Unable to book your appointment — missing: {', '.join(missing_fields)}."
+
     print(f"✅ Booking event for {name} at {datetime_str}")
-    return f"Your appointment at {datetime_str} is all set! We’ll reach out with a quick confirmation text one hour beforehand."
+    
+    contact = phone if phone else email
+
+    return (
+        f"✅ All set, {name}!\n\n"
+        f"📅 Your call is booked for **{datetime_str}**.\n"
+        f"🏢 Business: {business_name}\n"
+        f"📍 Address: {address}\n"
+        f"📞 Contact: {contact}\n\n"
+        f"We’ll send a quick reminder one hour before your call."
+    )

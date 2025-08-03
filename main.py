@@ -116,24 +116,55 @@ def should_continue_chatting(state: AgentState) -> dict:
 
 def run_booking_tool(state: AgentState) -> AgentState:
     print("📍 Node: run_booking_tool")
-    name = state.get("form_data", {}).get("name")
-    datetime_str = state.get("form_data", {}).get("datetime_str")
+    form_data = state.get("form_data", {})
 
-    if not name or not datetime_str:
-        print("⚠️ Missing booking info — skipping tool call.")
-        state["messages"].append(AIMessage(content="Before I can book your appointment, I just need your name and a time that works for you."))
+    # Gather fields
+    name = form_data.get("name")
+    datetime_str = form_data.get("datetime_str")
+    business_name = form_data.get("business_name")
+    address = form_data.get("address")
+    phone = form_data.get("phone")
+    email = form_data.get("email")
+
+    # Check for required fields
+    missing = []
+    if not name:
+        missing.append("name")
+    if not datetime_str:
+        missing.append("date & time")
+    if not business_name:
+        missing.append("business name")
+    if not address:
+        missing.append("address")
+    if not (phone or email):
+        missing.append("phone or email")
+
+    if missing:
+        msg = "Before I can book your appointment, I still need: " + ", ".join(missing)
+        print(f"🛑 Missing fields: {missing}")
+        state["messages"].append(AIMessage(content=msg))
         return state
 
+    # Try booking
     try:
-        print(f"✅ Booking event for {name} at {datetime_str}")
-        result = create_calendar_event(datetime_str, name)
+        result = create_calendar_event(
+            datetime_str=datetime_str,
+            name=name,
+            business_name=business_name,
+            address=address,
+            phone=phone,
+            email=email
+        )
         print(f"📆 Tool result: {result}")
         state["messages"].append(AIMessage(content=result))
+
     except Exception as e:
         print(f"❌ Tool failed: {str(e)}")
         state["messages"].append(AIMessage(content="Sorry, I had trouble scheduling the event."))
 
     return state
+
+
 
 
 
@@ -156,11 +187,20 @@ def chat_with_user(state: AgentState) -> AgentState:
     # --- Extract name and datetime for booking ---
     extraction_prompt = [
         SystemMessage(content="""
-            Extract name and datetime from the conversation.
-            Reply in JSON format like:
-            {"name": "Max", "datetime_str": "August 3rd at 5pm"}
+            Extract all the following fields from the conversation. 
+            Respond in JSON format like:
 
-            Use null for any missing values.
+            {
+            "name": "Max",
+            "datetime_str": "August 3rd at 5pm",
+            "business_name": "GhostStack",
+            "address": "123 Main St, Wichita KS",
+            "phone": "316-555-1234",
+            "email": "max@example.com"
+            }
+
+            Use null for any missing fields.
+
         """)
     ] + state["messages"][-3:]
 
