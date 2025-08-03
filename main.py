@@ -179,48 +179,16 @@ def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
 
     response = llm_with_tools.invoke(state["messages"])
-
-    # Always show the LLM reply
     ai_msg = response.content.strip()
     state["messages"].append(AIMessage(content=ai_msg))
 
-    # --- Extract name and datetime for booking ---
-    extraction_prompt = [
-        SystemMessage(content="""
-            Extract all the following fields from the conversation. 
-            Respond in JSON format like:
+    # Initialize form_data if missing
+    state["form_data"] = state.get("form_data", {})
 
-            {
-            "name": "Max",
-            "datetime_str": "August 3rd at 5pm",
-            "business_name": "GhostStack",
-            "address": "123 Main St, Wichita KS",
-            "phone": "316-555-1234",
-            "email": "max@example.com"
-            }
-
-            Use null for any missing fields.
-
-        """)
-    ] + state["messages"][-3:]
-
-    try:
-        extraction_response = classifier_llm.invoke(extraction_prompt)
-        extracted = json.loads(extraction_response.content)
-        print(f"🔍 Extracted info: {extracted}")
-
-        # Ensure form_data exists
-        state["form_data"] = state.get("form_data", {})
-
-        for key in ("name", "datetime_str"):
-            if extracted.get(key):
-                state["form_data"][key] = extracted[key]
-
-    except Exception as e:
-        print(f"⚠️ Extraction failed: {e}")
+    # Manually update form_data by looking for known fields in the LLM's reply (for now this is placeholder logic)
+    # You can later use regex, patterns, or entity extraction here if needed
 
     return state
-
 
 
 # --- Graph setup ---
