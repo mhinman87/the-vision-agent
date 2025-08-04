@@ -11,14 +11,36 @@ from openai import OpenAI
 
 client = OpenAI()
 
-def parse_with_llm(natural_date: str) -> Optional[str]:
-    prompt = f"Convert this into an ISO 8601 datetime string for a calendar event: '{natural_date}'. Return only the ISO string (e.g., '2025-08-07T10:00:00')."
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2
+from datetime import datetime
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_openai import ChatOpenAI
+
+def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
+    today = datetime.now().strftime("%A, %B %d, %Y")  # e.g. "Sunday, August 04, 2025"
+    print(f"🧠 Asking LLM to convert '{natural_str}' based on today: {today}")
+
+    system_prompt = (
+        f"You are a precise date parser. Today is {today}.\n"
+        "Convert the provided natural language date/time into an ISO 8601 datetime string "
+        "(e.g. 2025-08-07T17:00:00). Return only the ISO string. Do not include any explanation."
     )
-    return response.choices[0].message.content.strip()
+
+    llm = ChatOpenAI(model="gpt-4o")
+
+    response = llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=natural_str)
+    ])
+
+    clean_str = response.content.strip()
+
+    try:
+        parsed = datetime.fromisoformat(clean_str)
+        return parsed
+    except Exception as e:
+        print(f"❌ LLM returned invalid ISO: {clean_str} — {e}")
+        return None
+
 
 
 def load_credentials():
@@ -62,7 +84,7 @@ def create_calendar_event(
     print("📆 Starting real calendar booking...")
 
     # Parse datetime
-    iso_datetime = parse_with_llm(datetime_str)
+    iso_datetime = parse_datetime_with_llm(datetime_str)
     parsed_start = datetime.fromisoformat(iso_datetime)
     
 
