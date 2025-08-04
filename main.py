@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from collections import defaultdict
-from tools.calendar import create_calendar_event
+from tools.calendar import create_calendar_event, parse_datetime_with_llm
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import MessagesState
 from langchain_core.messages import BaseMessage 
@@ -151,6 +151,24 @@ def run_booking_tool(state: AgentState) -> AgentState:
         msg = "Before I can book your appointment, I still need: " + ", ".join(missing)
         print(f"🛑 Missing fields: {missing}")
         state["messages"].append(AIMessage(content=msg))
+        return state
+    
+    # Step 1: Parse time using LLM
+    proposed_time = parse_datetime_with_llm(datetime_str)
+    if not proposed_time:
+        state["messages"].append(AIMessage(content="I couldn’t understand that date and time. Could you try rephrasing it?"))
+        return state
+        
+    # Step 2: Convert to Central Time
+    import pytz
+    central = pytz.timezone("US/Central")
+    proposed_time_central = proposed_time.astimezone(central)
+
+    # Step 3: Enforce allowed window
+    if proposed_time_central.weekday() >= 5 or not (10 <= proposed_time_central.hour < 16):
+        state["messages"].append(AIMessage(
+            content="📅 I can only book calls Monday to Friday between 10 AM and 4 PM Central Time. Could you pick a time within that range?"
+        ))
         return state
 
     # Try booking
