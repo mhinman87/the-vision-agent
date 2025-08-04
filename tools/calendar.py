@@ -4,9 +4,21 @@ import os
 import dateparser
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 
+from openai import OpenAI
+
+client = OpenAI()
+
+def parse_with_llm(natural_date: str) -> Optional[str]:
+    prompt = f"Convert this into an ISO 8601 datetime string for a calendar event: '{natural_date}'. Return only the ISO string (e.g., '2025-08-07T10:00:00')."
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2
+    )
+    return response.choices[0].message.content.strip()
 
 
 def load_credentials():
@@ -50,14 +62,9 @@ def create_calendar_event(
     print("📆 Starting real calendar booking...")
 
     # Parse datetime
-    parsed_start = dateparser.parse(
-    datetime_str,
-    settings={
-        'PREFER_DATES_FROM': 'future',
-        'TIMEZONE': 'US/Central',
-        'RETURN_AS_TIMEZONE_AWARE': True
-    }
-)
+    iso_datetime = parse_with_llm(datetime_str)
+    parsed_start = datetime.fromisoformat(iso_datetime)
+    
 
     if not parsed_start:
         return "❌ I couldn't understand the date/time. Please rephrase it."
