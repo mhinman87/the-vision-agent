@@ -16,7 +16,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
 def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
-    today = datetime.now().strftime("%A, %B %d, %Y")  # e.g. "Sunday, August 04, 2025"
+    today = datetime.now().strftime("%A, %B %d, %Y")
     print(f"🧠 Asking LLM to convert '{natural_str}' based on today: {today}")
 
     system_prompt = (
@@ -32,7 +32,7 @@ def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
         HumanMessage(content=natural_str)
     ])
 
-    clean_str = response.content.strip()
+    clean_str = response.content.strip()  # ✅ This is the fix
 
     try:
         parsed = datetime.fromisoformat(clean_str)
@@ -40,6 +40,7 @@ def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
     except Exception as e:
         print(f"❌ LLM returned invalid ISO: {clean_str} — {e}")
         return None
+
 
 
 
