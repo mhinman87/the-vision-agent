@@ -136,8 +136,11 @@ def run_booking_tool(state: AgentState) -> AgentState:
         missing.append("business name")
     if not address:
         missing.append("address")
-    if not (phone or email):
-        missing.append("phone or email")
+    if not phone:
+        missing.append("phone")
+    if not email:
+        missing.append("email")
+
 
     if missing:
         msg = "Before I can book your appointment, I still need: " + ", ".join(missing)
@@ -168,7 +171,10 @@ def run_booking_tool(state: AgentState) -> AgentState:
         print(f"🗃️ Saved appointment for {name}: {appointments_by_name[name]}")
 
         # 🎒 Clear backpack
+        print("🧹 Clearing form_data after booking")
         state["form_data"] = {}
+        print("🎒 form_data after clearing:", state["form_data"])
+
 
     except Exception as e:
         print(f"❌ Tool failed: {str(e)}")
