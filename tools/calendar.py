@@ -4,19 +4,19 @@ import os
 import dateparser
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 
 from openai import OpenAI
 
 client = OpenAI()
 
-from datetime import datetime
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
+import datetime
 
-def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
-    today = datetime.now().strftime("%A, %B %d, %Y")
+def parse_datetime_with_llm(natural_str: str) -> Optional[datetime.datetime]:
+    today = datetime.datetime.now().strftime("%A, %B %d, %Y")
     print(f"🧠 Asking LLM to convert '{natural_str}' based on today: {today}")
 
     system_prompt = (
@@ -35,7 +35,7 @@ def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
     clean_str = response.content.strip()  # ✅ This is the fix
 
     try:
-        parsed = datetime.fromisoformat(clean_str)
+        parsed = datetime.datetime.fromisoformat(clean_str)
         return parsed
     except Exception as e:
         print(f"❌ LLM returned invalid ISO: {clean_str} — {e}")
@@ -85,12 +85,16 @@ def create_calendar_event(
     print("📆 Starting real calendar booking...")
 
     # Parse datetime
-    iso_datetime = parse_datetime_with_llm(datetime_str)
-    parsed_start = datetime.fromisoformat(iso_datetime)
-    
+    #iso_datetime = parse_datetime_with_llm(datetime_str)
+
+    # Parse datetime
+    parsed_start = parse_datetime_with_llm(datetime_str)
 
     if not parsed_start:
         return "❌ I couldn't understand the date/time. Please rephrase it."
+
+    parsed_end = parsed_start + timedelta(hours=1)
+
 
     parsed_end = parsed_start + timedelta(hours=1)
 
