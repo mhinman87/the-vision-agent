@@ -1,10 +1,10 @@
 # tools/calendar.py
 
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 import os
-import datetime
-from langchain.tools import tool
+import dateparser
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from datetime import timedelta
 from typing import Optional
 
 
@@ -16,11 +16,6 @@ def load_credentials():
     creds = Credentials.from_authorized_user_file(token_path)
     return creds
 
-import os
-import dateparser
-from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-from datetime import timedelta
 
 def create_calendar_event(
     datetime_str: Optional[str],
@@ -55,7 +50,15 @@ def create_calendar_event(
     print("📆 Starting real calendar booking...")
 
     # Parse datetime
-    parsed_start = dateparser.parse(datetime_str)
+    parsed_start = dateparser.parse(
+    datetime_str,
+    settings={
+        'PREFER_DATES_FROM': 'future',
+        'TIMEZONE': 'US/Central',
+        'RETURN_AS_TIMEZONE_AWARE': True
+    }
+)
+
     if not parsed_start:
         return "❌ I couldn't understand the date/time. Please rephrase it."
 
@@ -102,43 +105,3 @@ def store_token(token_json: str):
     with open("token.json", "w") as f:
         f.write(token_json)
 
-
-# def create_calendar_event(
-#     datetime_str: Optional[str],
-#     name: Optional[str],
-#     business_name: Optional[str],
-#     address: Optional[str],
-#     phone: Optional[str],
-#     email: Optional[str]
-# ) -> str:
-#     """Simulates creating a calendar event and returns a confirmation message."""
-
-#     # Validate required fields
-#     missing_fields = []
-#     if not datetime_str:
-#         missing_fields.append("datetime")
-#     if not name:
-#         missing_fields.append("name")
-#     if not business_name:
-#         missing_fields.append("business name")
-#     if not address:
-#         missing_fields.append("address")
-#     if not (phone or email):
-#         missing_fields.append("phone or email")
-
-#     if missing_fields:
-#         print(f"❌ Missing fields for booking: {missing_fields}")
-#         return f"Unable to book your appointment — missing: {', '.join(missing_fields)}."
-
-#     print(f"✅ Booking event for {name} at {datetime_str}")
-    
-#     contact = phone if phone else email
-
-#     return (
-#         f"✅ All set, {name}!\n\n"
-#         f"📅 Your call is booked for **{datetime_str}**.\n"
-#         f"🏢 Business: {business_name}\n"
-#         f"📍 Address: {address}\n"
-#         f"📞 Contact: {contact}\n\n"
-#         f"We’ll send a quick reminder one hour before your call."
-#     )
