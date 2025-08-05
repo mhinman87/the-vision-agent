@@ -54,6 +54,10 @@ def load_credentials():
 
 
 
+from token_handler import get_persistent_credentials
+from googleapiclient.discovery import build
+from datetime import timedelta
+
 def create_calendar_event(
     datetime_str: Optional[str],
     name: Optional[str],
@@ -87,28 +91,22 @@ def create_calendar_event(
     print("📆 Starting real calendar booking...")
 
     # Parse datetime
-    #iso_datetime = parse_datetime_with_llm(datetime_str)
-
-    # Parse datetime
     parsed_start = parse_datetime_with_llm(datetime_str)
-
     if not parsed_start:
         return "❌ I couldn't understand the date/time. Please rephrase it."
 
     parsed_end = parsed_start + timedelta(hours=1)
 
-
-    parsed_end = parsed_start + timedelta(hours=1)
+    # ✅ Use persistent credentials
+    creds = get_persistent_credentials()
+    if not creds:
+        print("❌ No credentials available")
+        return "❌ Calendar authorization token missing."
 
     try:
-        token_path = "token.json"
-        if not os.path.exists(token_path):
-            return "❌ Calendar authorization token missing."
-
-        creds = Credentials.from_authorized_user_file(token_path)
         service = build("calendar", "v3", credentials=creds)
 
-        # Build event dynamically
+        # Build event
         event = {
             'summary': f'Meeting with {name} from {business_name}',
             'description': f'Scheduled via Alfred.\n\nBusiness: {business_name}\nAddress: {address}\nPhone: {phone}\nEmail: {email}',
