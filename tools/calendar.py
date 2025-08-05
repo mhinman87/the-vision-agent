@@ -7,6 +7,9 @@ from google.oauth2.credentials import Credentials
 from datetime import timedelta
 from typing import Optional
 from token_handler import get_persistent_credentials
+from token_handler import get_persistent_credentials
+from googleapiclient.discovery import build
+from datetime import timedelta
 
 from openai import OpenAI
 
@@ -54,9 +57,7 @@ def load_credentials():
 
 
 
-from token_handler import get_persistent_credentials
-from googleapiclient.discovery import build
-from datetime import timedelta
+
 
 def create_calendar_event(
     datetime_str: Optional[str],
@@ -68,6 +69,7 @@ def create_calendar_event(
 ) -> str:
     """
     Creates a real event in Google Calendar using parsed booking details.
+    Assumes all input is pre-validated and that datetime_str is in ISO 8601 format.
     """
     # Validate required fields
     missing_fields = []
@@ -90,12 +92,12 @@ def create_calendar_event(
 
     print("📆 Starting real calendar booking...")
 
-    # Parse datetime
-    parsed_start = parse_datetime_with_llm(datetime_str)
-    if not parsed_start:
-        return "❌ I couldn't understand the date/time. Please rephrase it."
-
-    parsed_end = parsed_start + timedelta(hours=1)
+    try:
+        parsed_start = datetime.datetime.fromisoformat(datetime_str)
+        parsed_end = parsed_start + timedelta(hours=1)
+    except Exception as e:
+        print(f"❌ Failed to parse ISO datetime: {datetime_str} — {e}")
+        return "❌ Internal error: failed to interpret booking time."
 
     # ✅ Use persistent credentials
     creds = get_persistent_credentials()
@@ -106,10 +108,12 @@ def create_calendar_event(
     try:
         service = build("calendar", "v3", credentials=creds)
 
-        # Build event
         event = {
             'summary': f'Meeting with {name} from {business_name}',
-            'description': f'Scheduled via Alfred.\n\nBusiness: {business_name}\nAddress: {address}\nPhone: {phone}\nEmail: {email}',
+            'description': (
+                f'Scheduled via Alfred.\n\nBusiness: {business_name}\n'
+                f'Address: {address}\nPhone: {phone}\nEmail: {email}'
+            ),
             'start': {
                 'dateTime': parsed_start.isoformat(),
                 'timeZone': 'America/Chicago',
@@ -127,11 +131,16 @@ def create_calendar_event(
         event_link = created_event.get('htmlLink')
 
         print(f"✅ Event created: {event_link}")
-        return f"✅ All set, {name}!\n\n📅 Your appointment is scheduled for **{parsed_start.strftime('%A, %B %-d at %-I:%M %p')}**.\nWe’ve also added it to our calendar: {event_link}"
+        return (
+            f"✅ All set, {name}!\n\n"
+            f"📅 Your appointment is scheduled for **{parsed_start.strftime('%A, %B %-d at %-I:%M %p')}**.\n"
+            f"We’ve also added it to our calendar: {event_link}"
+        )
 
     except Exception as e:
         print(f"❌ Calendar error: {e}")
         return f"❌ Failed to book your appointment: {str(e)}"
+
 
 
 

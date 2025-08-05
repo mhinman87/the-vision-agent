@@ -146,18 +146,34 @@ def run_booking_tool(state: AgentState) -> AgentState:
     if not email:
         missing.append("email")
 
-
     if missing:
         msg = "Before I can book your appointment, I still need: " + ", ".join(missing)
         print(f"🛑 Missing fields: {missing}")
         state["messages"].append(AIMessage(content=msg))
         return state
-    
 
-    # Try booking
+    # ⏰ Parse and validate datetime
+    from calendar import parse_datetime_with_llm  # or wherever your function lives
+    parsed_datetime = parse_datetime_with_llm(datetime_str)
+
+    if not parsed_datetime:
+        state["messages"].append(AIMessage(content="I couldn’t understand that date and time. Could you rephrase it?"))
+        return state
+
+    # 🕙 Only allow appointments between 10 AM and 4 PM
+    if not (10 <= parsed_datetime.hour < 16):
+        state["messages"].append(AIMessage(
+            content="I can only book appointments between 10 AM and 4 PM. Can you suggest a different time?"
+        ))
+        return state
+
+    # ✅ Overwrite datetime_str with validated ISO string
+    form_data["datetime_str"] = parsed_datetime.isoformat()
+
+    # 📆 Try booking
     try:
         result = create_calendar_event(
-            datetime_str=datetime_str,
+            datetime_str=form_data["datetime_str"],
             name=name,
             business_name=business_name,
             address=address,
@@ -169,7 +185,7 @@ def run_booking_tool(state: AgentState) -> AgentState:
 
         # 🧠 Save appointment globally
         appointments_by_name[name] = {
-            "datetime_str": datetime_str,
+            "datetime_str": form_data["datetime_str"],
             "business_name": business_name,
             "address": address,
             "contact": phone or email
@@ -181,16 +197,11 @@ def run_booking_tool(state: AgentState) -> AgentState:
         state["form_data"] = {}
         print("🎒 form_data after clearing:", state["form_data"])
 
-
     except Exception as e:
         print(f"❌ Tool failed: {str(e)}")
         state["messages"].append(AIMessage(content="Sorry, I had trouble scheduling the event."))
 
     return state
-
-
-
-
 
 
 
