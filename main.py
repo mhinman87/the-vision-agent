@@ -153,7 +153,6 @@ def run_booking_tool(state: AgentState) -> AgentState:
         return state
 
     # ⏰ Parse and validate datetime
-    from calendar import parse_datetime_with_llm  # or wherever your function lives
     parsed_datetime = parse_datetime_with_llm(datetime_str)
 
     if not parsed_datetime:
