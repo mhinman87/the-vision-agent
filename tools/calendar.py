@@ -6,6 +6,7 @@ from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from datetime import timedelta
 from typing import Optional
+from token_handler import get_persistent_credentials
 
 from openai import OpenAI
 
@@ -48,7 +49,8 @@ def load_credentials():
     token_path = "token.json"
     if not os.path.exists(token_path):
         raise Exception("❌ No token.json found. Authorize first.")
-    creds = Credentials.from_authorized_user_file(token_path)
+    creds = get_persistent_credentials()
+
     return creds
 
 
