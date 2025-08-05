@@ -132,10 +132,14 @@ def create_calendar_event(
 
         print(f"✅ Event created: {event_link}")
         return (
-            f"✅ All set, {name}!\n\n"
-            f"📅 Your appointment is scheduled for **{parsed_start.strftime('%A, %B %-d at %-I:%M %p')}**.\n"
-            f"We’ve also added it to our calendar: {event_link}"
+            f"✅ You're all set, {name}!\n\n"
+            f"Thank you for your interest in Ghost Stack.\n\n"
+            f"📅 Your appointment is scheduled for {parsed_start.strftime('%A, %B %-d at %-I:%M %p')}\n\n"
+            f"I’ve also sent a confirmation email to {email} with a link to the event.\n\n"
+            f"This meeting is currently set as **in-person**, and Max will come to your location. He’ll also reach out about an hour beforehand to confirm you're still available.\n\n"
+            f"Thanks again for checking out Ghost Stack and our AI Agents — we’re excited to connect!"
         )
+
 
     except Exception as e:
         print(f"❌ Calendar error: {e}")
