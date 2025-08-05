@@ -394,6 +394,7 @@ def oauth_callback(request: Request):
     flow.fetch_token(authorization_response=str(request.url))
     creds = flow.credentials
     store_token(creds.to_json())
+    print("🔐 Token JSON:\n", creds.to_json())
     return {"status": "✅ Authorization complete — Alfred can now access your calendar."}
 
 
