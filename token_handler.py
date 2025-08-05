@@ -1,4 +1,3 @@
-# token_handler.py
 import os
 import json
 from google.oauth2.credentials import Credentials
@@ -8,15 +7,21 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 def get_persistent_credentials():
     token_json = os.getenv("GOOGLE_TOKEN")
+    
     if not token_json:
-        print("❌ No token found in environment")
+        print("❌ No GOOGLE_TOKEN found in env vars")
         return None
+    
+    print("✅ GOOGLE_TOKEN found")
 
-    creds = Credentials.from_authorized_user_info(json.loads(token_json), SCOPES)
+    try:
+        creds = Credentials.from_authorized_user_info(json.loads(token_json), SCOPES)
+        if creds.expired and creds.refresh_token:
+            print("🔁 Refreshing token...")
+            creds.refresh(Request())
+            print("✅ Token refreshed")
 
-    if creds.expired and creds.refresh_token:
-        print("🔁 Refreshing token...")
-        creds.refresh(Request())
-        print("✅ Refreshed token successfully.")
-
-    return creds
+        return creds
+    except Exception as e:
+        print("🔥 Error loading credentials:", str(e))
+        return None

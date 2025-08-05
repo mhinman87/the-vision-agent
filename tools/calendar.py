@@ -45,13 +45,13 @@ def parse_datetime_with_llm(natural_str: str) -> Optional[datetime.datetime]:
 
 
 
-def load_credentials():
-    token_path = "token.json"
-    if not os.path.exists(token_path):
-        raise Exception("❌ No token.json found. Authorize first.")
-    creds = get_persistent_credentials()
 
+def load_credentials():
+    creds = get_persistent_credentials()
+    if not creds:
+        raise Exception("❌ No calendar credentials found — authorization required.")
     return creds
+
 
 
 def create_calendar_event(
