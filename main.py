@@ -5,7 +5,7 @@ load_dotenv()
 # main.py
 import os
 from langgraph.graph import StateGraph, END
-from langchain_openai import ChatOpenAI
+
 # from langgraph.checkpoint.sqlite import SqliteSaver
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,18 +14,17 @@ from collections import defaultdict
 from tools.calendar import create_calendar_event, parse_datetime_with_llm
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import MessagesState
-from langchain_core.messages import BaseMessage 
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import AIMessage
 from langchain_core.messages import SystemMessage
 from typing import Dict
+from state.agent_state import AgentState
+from llm_config import llm, llm_with_tools
+from nodes.keep_chatting import should_continue_chatting
 import json
-from typing import TypedDict, List, Optional
+
 
 from pydantic import BaseModel
-
-
-
 
 
 
@@ -37,13 +36,6 @@ appointments_by_name = {}
 
 class MessageRequest(BaseModel):
     message: str
-
-
-class AgentState(TypedDict):
-    messages: List[BaseMessage]
-    classification: Optional[str]
-    next_action: Optional[str]
-    form_data: Dict[str, Optional[str]] 
 
 
 chat_sessions: Dict[str, AgentState] = defaultdict(lambda: {
@@ -83,40 +75,6 @@ chat_sessions: Dict[str, AgentState] = defaultdict(lambda: {
 })
 
 
-
-
-def should_continue_chatting(state: AgentState) -> dict:
-    print("📍 Node: should_continue_chatting")
-
-    name = state.get("form_data", {}).get("name")
-    datetime_str = state.get("form_data", {}).get("datetime_str")
-
-    # ✅ Only continue to booking if we have both
-    if not (name and datetime_str):
-        print("🛑 Missing info — keep chatting.")
-        return {"next": "chat"}
-
-    recent_messages = state["messages"][-3:]
-    response = classifier_llm.invoke([
-        SystemMessage(content="""
-            You are deciding the next action in a conversation.
-
-            Reply ONLY with: 'schedule_call' or 'chat'.
-
-            Respond with 'schedule_call' ONLY if the user clearly asks to schedule, book, or set up a time to talk.
-
-            Examples of 'schedule_call':
-            - "Can I schedule a call?"
-            - "I'd like to talk to someone."
-            - "How do I book a time?"
-
-            If the user is asking questions, chatting, or learning more, respond with 'chat'.
-        """)
-    ] + recent_messages)
-
-    decision = response.content.strip().lower()
-    print(f"🔍 LLM decision: {decision}")
-    return {"next": "schedule_call"} if decision == "schedule_call" else {"next": "chat"}
 
 
 def run_booking_tool(state: AgentState) -> AgentState:
@@ -205,10 +163,7 @@ def run_booking_tool(state: AgentState) -> AgentState:
 
 
 # --- Define the LLM chat node ---
-llm = ChatOpenAI(model="gpt-4o")
-tools = [create_calendar_event]
-llm_with_tools = llm.bind_tools(tools)
-classifier_llm = ChatOpenAI(model="gpt-4o") 
+
 
 def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
