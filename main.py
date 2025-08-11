@@ -22,6 +22,7 @@ from state.agent_state import AgentState
 from llm_config import llm, llm_with_tools
 from nodes.keep_chatting import should_continue_chatting
 from nodes.booking import run_booking_tool
+from nodes.chat import chat_with_user
 
 
 from pydantic import BaseModel
