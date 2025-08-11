@@ -152,3 +152,51 @@ def store_token(token_json: str):
     with open("token.json", "w") as f:
         f.write(token_json)
 
+
+# tools/calendar.py
+from googleapiclient.discovery import build
+from datetime import datetime
+
+
+def get_upcoming_event(name=None, email=None):
+    creds = get_persistent_credentials()
+    if not creds:
+        print("❌ No credentials available for lookup.")
+        return None
+
+    service = build("calendar", "v3", credentials=creds)
+    now = datetime.utcnow().isoformat() + 'Z'
+
+    try:
+        events_result = service.events().list(
+            calendarId='primary',
+            timeMin=now,
+            maxResults=10,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+
+        events = events_result.get('items', [])
+        print(f"🔍 Found {len(events)} upcoming events")
+
+        for event in events:
+            summary = event.get('summary', '').lower()
+            description = event.get('description', '').lower()
+            start = event.get('start', {}).get('dateTime')
+
+            if not start:
+                continue
+
+            if (name and name.lower() in summary) or (email and email.lower() in description):
+                return {
+                    "start_time": start,
+                    "summary": summary
+                }
+
+    except Exception as e:
+        print(f"❌ Failed to fetch calendar events: {e}")
+
+    return None
+
+
+

@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from collections import defaultdict
-from tools.calendar import create_calendar_event, parse_datetime_with_llm
+from tools.calendar import create_calendar_event
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import MessagesState
 from langchain_core.messages import HumanMessage
@@ -22,7 +22,6 @@ from state.agent_state import AgentState
 from llm_config import llm, llm_with_tools
 from nodes.keep_chatting import should_continue_chatting
 from nodes.booking import run_booking_tool
-import json
 
 
 from pydantic import BaseModel
@@ -134,6 +133,9 @@ def chat_with_user(state: AgentState) -> AgentState:
     except Exception as e:
         print(f"⚠️ Extraction failed: {e}")
 
+    print("🔍 DEBUG: Final state form_data:", state["form_data"])
+    print("🔍 DEBUG: State ID:", id(state))
+    
     return state
 
 
