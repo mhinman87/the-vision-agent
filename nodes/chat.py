@@ -61,4 +61,8 @@ def chat_with_user(state: AgentState) -> AgentState:
     except Exception as e:
         print(f"⚠️ Extraction failed: {e}")
 
+    print(f"🔍 DEBUG: chat_with_user returning form_data: {state['form_data']}")
+    print(f"🔍 DEBUG: chat_with_user state ID: {id(state)}")
+    print(f"🔍 DEBUG: chat_with_user state keys: {list(state.keys())}")
+    
     return state

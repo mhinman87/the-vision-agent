@@ -5,6 +5,10 @@ from langchain_core.messages import SystemMessage
 
 def should_continue_chatting(state: AgentState) -> dict:
     print("📍 Node: should_continue_chatting")
+    print(f"🔍 DEBUG: Full state form_data: {state.get('form_data', {})}")
+    print(f"🔍 DEBUG: State ID: {id(state)}")
+    print(f"🔍 DEBUG: State keys: {list(state.keys())}")
+    print(f"🔍 DEBUG: form_data type: {type(state.get('form_data'))}")
 
     name = state.get("form_data", {}).get("name")
     datetime_str = state.get("form_data", {}).get("datetime_str")

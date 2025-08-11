@@ -148,6 +148,8 @@ async def vision_chat(request: Request, body: dict = Body(...)):
 
     # Run the graph
     updated_state = graph.invoke(state)
+    print(f"🔍 DEBUG: Graph returned state keys: {list(updated_state.keys())}")
+    print(f"🔍 DEBUG: Graph returned form_data: {updated_state.get('form_data', {})}")
 
     # Save the updated state back to the session
     chat_sessions[session_id] = updated_state
