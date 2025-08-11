@@ -10,8 +10,9 @@ def chat_with_user(state: AgentState) -> AgentState:
     ai_msg = response.content.strip()
     state["messages"].append(AIMessage(content=ai_msg))
 
-    # Initialize backpack
-    state["form_data"] = state.get("form_data", {})
+    # Only initialize if not already present
+    if "form_data" not in state:
+        state["form_data"] = {}
 
     # Get the most recent user message
     last_user_message = ""
@@ -60,7 +61,4 @@ def chat_with_user(state: AgentState) -> AgentState:
     except Exception as e:
         print(f"⚠️ Extraction failed: {e}")
 
-    print("🔍 DEBUG: Final state form_data:", state["form_data"])
-    print("🔍 DEBUG: State ID:", id(state))
-    
     return state
