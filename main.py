@@ -195,11 +195,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import uuid
 from fastapi import Body
 
 @app.post("/vision")
 async def vision_chat(request: Request, body: dict = Body(...)):
-    session_id = body.get("session_id") or request.client.host
+    # Generate unique session ID if not provided
+    session_id = body.get("session_id") or str(uuid.uuid4())
+    print(f"🔑 Session ID: {session_id}")
     user_input = body["message"]
 
     # Retrieve per-session AgentState
