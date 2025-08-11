@@ -4,12 +4,11 @@ import os
 import dateparser
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 from token_handler import get_persistent_credentials
 from token_handler import get_persistent_credentials
 from googleapiclient.discovery import build
-from datetime import timedelta
 
 from openai import OpenAI
 
@@ -17,10 +16,9 @@ client = OpenAI()
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
-import datetime
 
-def parse_datetime_with_llm(natural_str: str) -> Optional[datetime.datetime]:
-    today = datetime.datetime.now().strftime("%A, %B %d, %Y")
+def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
+    today = datetime.now().strftime("%A, %B %d, %Y")
     print(f"🧠 Asking LLM to convert '{natural_str}' based on today: {today}")
 
     system_prompt = (
@@ -39,7 +37,7 @@ def parse_datetime_with_llm(natural_str: str) -> Optional[datetime.datetime]:
     clean_str = response.content.strip()  # ✅ This is the fix
 
     try:
-        parsed = datetime.datetime.fromisoformat(clean_str)
+        parsed = datetime.fromisoformat(clean_str)
         return parsed
     except Exception as e:
         print(f"❌ LLM returned invalid ISO: {clean_str} — {e}")
@@ -93,7 +91,7 @@ def create_calendar_event(
     print("📆 Starting real calendar booking...")
 
     try:
-        parsed_start = datetime.datetime.fromisoformat(datetime_str)
+        parsed_start = datetime.fromisoformat(datetime_str)
         parsed_end = parsed_start + timedelta(hours=1)
     except Exception as e:
         print(f"❌ Failed to parse ISO datetime: {datetime_str} — {e}")
@@ -153,9 +151,7 @@ def store_token(token_json: str):
         f.write(token_json)
 
 
-# tools/calendar.py
-from googleapiclient.discovery import build
-from datetime import datetime
+
 
 
 def get_upcoming_event(name=None, email=None):
