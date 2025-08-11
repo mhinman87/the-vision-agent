@@ -12,19 +12,7 @@ def should_continue_chatting(state: AgentState) -> dict:
     print(f"🔍 DEBUG: form_data ID: {id(state.get('form_data', {}))}")
     print(f"🔍 DEBUG: form_data content: {state.get('form_data', {})}")
 
-    name = state.get("form_data", {}).get("name")
-    datetime_str = state.get("form_data", {}).get("datetime_str")
-    
-    print(f"🔍 DEBUG: name = {name}")
-    print(f"🔍 DEBUG: datetime_str = {datetime_str}")
-    print(f"🔍 DEBUG: name and datetime_str both present: {bool(name and datetime_str)}")
-
-    # ✅ Only continue to booking if we have both
-    if not (name and datetime_str):
-        print("🛑 Missing info — keep chatting.")
-        state["next"] = "chat"
-        return state
-
+    # First, determine what the user wants to do
     recent_messages = state["messages"][-3:]
     response = classifier_llm.invoke([
         SystemMessage(content="""
@@ -60,11 +48,29 @@ def should_continue_chatting(state: AgentState) -> dict:
     decision = response.content.strip().lower()
     print(f"🔍 LLM decision: {decision}")
     
-    # Set the next action in the state
+    # Now check requirements for each action
     if decision == "schedule_call":
-        state["next"] = "schedule_call"
+        # For scheduling, we need both name and datetime
+        name = state.get("form_data", {}).get("name")
+        datetime_str = state.get("form_data", {}).get("datetime_str")
+        
+        if not (name and datetime_str):
+            print("🛑 Missing info for scheduling — keep chatting.")
+            state["next"] = "chat"
+        else:
+            state["next"] = "schedule_call"
+            
     elif decision == "lookup_appointment":
-        state["next"] = "lookup_appointment"
+        # For lookup, we need either name or email
+        name = state.get("form_data", {}).get("name")
+        email = state.get("form_data", {}).get("email")
+        
+        if not (name or email):
+            print("🛑 Missing name or email for lookup — keep chatting.")
+            state["next"] = "chat"
+        else:
+            state["next"] = "lookup_appointment"
+            
     else:
         state["next"] = "chat"
     
