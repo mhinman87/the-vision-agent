@@ -64,5 +64,6 @@ def chat_with_user(state: AgentState) -> AgentState:
     print(f"🔍 DEBUG: chat_with_user returning form_data: {state['form_data']}")
     print(f"🔍 DEBUG: chat_with_user state ID: {id(state)}")
     print(f"🔍 DEBUG: chat_with_user state keys: {list(state.keys())}")
+    print(f"🔍 DEBUG: chat_with_user form_data ID: {id(state['form_data'])}")
     
     return state

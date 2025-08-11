@@ -9,6 +9,8 @@ def should_continue_chatting(state: AgentState) -> dict:
     print(f"🔍 DEBUG: State ID: {id(state)}")
     print(f"🔍 DEBUG: State keys: {list(state.keys())}")
     print(f"🔍 DEBUG: form_data type: {type(state.get('form_data'))}")
+    print(f"🔍 DEBUG: form_data ID: {id(state.get('form_data', {}))}")
+    print(f"🔍 DEBUG: form_data content: {state.get('form_data', {})}")
 
     name = state.get("form_data", {}).get("name")
     datetime_str = state.get("form_data", {}).get("datetime_str")
