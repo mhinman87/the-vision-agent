@@ -4,6 +4,9 @@ from tools.calendar import parse_datetime_with_llm, create_calendar_event
 
 def run_booking_tool(state: AgentState) -> AgentState:
     print("📍 Node: run_booking_tool")
+    print("🚨 BOOKING NODE IS ACTUALLY RUNNING!")
+    print(f"🔍 DEBUG: Booking node received state keys: {list(state.keys())}")
+    print(f"🔍 DEBUG: Booking node received form_data: {state.get('form_data', {})}")
     form_data = state.get("form_data", {})
 
     # Gather fields

@@ -14,11 +14,16 @@ def should_continue_chatting(state: AgentState) -> dict:
 
     name = state.get("form_data", {}).get("name")
     datetime_str = state.get("form_data", {}).get("datetime_str")
+    
+    print(f"🔍 DEBUG: name = {name}")
+    print(f"🔍 DEBUG: datetime_str = {datetime_str}")
+    print(f"🔍 DEBUG: name and datetime_str both present: {bool(name and datetime_str)}")
 
     # ✅ Only continue to booking if we have both
     if not (name and datetime_str):
         print("🛑 Missing info — keep chatting.")
-        return {"next": "chat"}
+        state["next"] = "chat"
+        return state
 
     recent_messages = state["messages"][-3:]
     response = classifier_llm.invoke([
