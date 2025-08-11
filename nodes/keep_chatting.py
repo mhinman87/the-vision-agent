@@ -40,4 +40,8 @@ def should_continue_chatting(state: AgentState) -> dict:
 
     decision = response.content.strip().lower()
     print(f"🔍 LLM decision: {decision}")
-    return {"next": "schedule_call"} if decision == "schedule_call" else {"next": "chat"}
+    
+    # Set the next action in the state
+    state["next"] = "schedule_call" if decision == "schedule_call" else "chat"
+    
+    return state
