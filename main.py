@@ -211,6 +211,9 @@ async def vision_chat(request: Request, body: dict = Body(...)):
     # Run the graph
     updated_state = graph.invoke(state)
 
+    # Save the updated state back to the session
+    chat_sessions[session_id] = updated_state
+
     # Append assistant reply
     reply = updated_state["messages"][-1].content
     chat_sessions[session_id]["messages"].append(AIMessage(content=reply))
