@@ -30,14 +30,28 @@ def should_continue_chatting(state: AgentState) -> dict:
         SystemMessage(content="""
             You are deciding the next action in a conversation.
 
-            Reply ONLY with: 'schedule_call' or 'chat'.
+            Reply ONLY with: 'schedule_call', 'lookup_appointment', or 'chat'.
 
             Respond with 'schedule_call' ONLY if the user clearly asks to schedule, book, or set up a time to talk.
+
+            Respond with 'lookup_appointment' if the user asks to:
+            - Look up their appointment
+            - Check their scheduled time
+            - Find their booking
+            - See when their meeting is
+            - "What time is my appointment?"
+            - "When am I scheduled?"
 
             Examples of 'schedule_call':
             - "Can I schedule a call?"
             - "I'd like to talk to someone."
             - "How do I book a time?"
+
+            Examples of 'lookup_appointment':
+            - "What time is my appointment?"
+            - "When am I scheduled?"
+            - "Can you look up my booking?"
+            - "What's my meeting time?"
 
             If the user is asking questions, chatting, or learning more, respond with 'chat'.
         """)
@@ -47,6 +61,11 @@ def should_continue_chatting(state: AgentState) -> dict:
     print(f"🔍 LLM decision: {decision}")
     
     # Set the next action in the state
-    state["next"] = "schedule_call" if decision == "schedule_call" else "chat"
+    if decision == "schedule_call":
+        state["next"] = "schedule_call"
+    elif decision == "lookup_appointment":
+        state["next"] = "lookup_appointment"
+    else:
+        state["next"] = "chat"
     
     return state

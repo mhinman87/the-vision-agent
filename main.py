@@ -22,6 +22,7 @@ from state.agent_state import AgentState
 from llm_config import llm, llm_with_tools
 from nodes.keep_chatting import should_continue_chatting
 from nodes.booking import run_booking_tool
+from nodes.lookup import lookup_appointment
 
 
 from pydantic import BaseModel
@@ -146,6 +147,7 @@ builder.add_node("chat", chat_with_user)
 # builder.add_node("schedule_call", alfred_booking_tool)
 builder.add_node("schedule_call", run_booking_tool)
 builder.add_node("should_continue_chatting", should_continue_chatting)
+builder.add_node("lookup_appointment", lookup_appointment)
 
 
 builder.set_entry_point("chat")
@@ -155,10 +157,12 @@ builder.add_conditional_edges(
     lambda state: state["next"],
     {
         "schedule_call": "schedule_call",
+        "lookup_appointment": "lookup_appointment",
         "chat": END  
     }
 )
 builder.add_edge("schedule_call", END)
+builder.add_edge("lookup_appointment", END)
 
 
 
