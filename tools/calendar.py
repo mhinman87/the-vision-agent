@@ -65,10 +65,27 @@ def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
 
 
 
+# Cache for credentials to avoid frequent refreshes
+_cached_creds = None
+_last_refresh_time = None
+
 def load_credentials():
+    global _cached_creds, _last_refresh_time
+    now = datetime.now()
+    
+    # If we have cached creds and they're less than 30 minutes old, use them
+    if _cached_creds and _last_refresh_time and (now - _last_refresh_time).total_seconds() < 1800:
+        return _cached_creds
+        
+    # Otherwise, get fresh credentials
     creds = get_persistent_credentials()
     if not creds:
         raise Exception("❌ No calendar credentials found — authorization required.")
+    
+    # Update cache
+    _cached_creds = creds
+    _last_refresh_time = now
+    
     return creds
 
 
@@ -115,9 +132,10 @@ def create_calendar_event(
         print(f"❌ Failed to parse ISO datetime: {datetime_str} — {e}")
         return "❌ Internal error: failed to interpret booking time."
 
-    # ✅ Use persistent credentials
-    creds = get_persistent_credentials()
-    if not creds:
+    # Get credentials
+    try:
+        creds = load_credentials()
+    except Exception as e:
         print("❌ No credentials available")
         return "❌ Calendar authorization token missing."
 
@@ -173,8 +191,9 @@ def store_token(token_json: str):
 
 
 def get_upcoming_event(name=None, email=None):
-    creds = get_persistent_credentials()
-    if not creds:
+    try:
+        creds = load_credentials()
+    except Exception as e:
         print("❌ No credentials available for lookup.")
         return None
 
@@ -245,8 +264,9 @@ def reschedule_appointment(
         return "❌ I couldn't understand that date and time. Please provide it in a clear format."
 
     # Get credentials
-    creds = get_persistent_credentials()
-    if not creds:
+    try:
+        creds = load_credentials()
+    except Exception as e:
         return "❌ Calendar authorization token missing."
 
     try:
@@ -321,8 +341,9 @@ def get_available_slots_next_week() -> list:
     Respects 48-hour buffer from current time and business hours (10 AM - 4 PM Central).
     Returns a list of available datetime strings.
     """
-    creds = get_persistent_credentials()
-    if not creds:
+    try:
+        creds = load_credentials()
+    except Exception as e:
         print("❌ No credentials available for availability check.")
         return []
 
@@ -434,8 +455,9 @@ def check_slot_available(datetime_str: str) -> dict:
     Returns:
         dict with 'available' (bool) and 'message' (str) keys
     """
-    creds = get_persistent_credentials()
-    if not creds:
+    try:
+        creds = load_credentials()
+    except Exception as e:
         print("❌ No credentials available for availability check.")
         return {"available": False, "message": "❌ Calendar authorization token missing."}
 
