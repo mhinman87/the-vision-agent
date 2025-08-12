@@ -519,9 +519,8 @@ builder.add_conditional_edges(
     "should_continue_chatting",
     lambda state: state["next"],
     {
-        "schedule_call": "check_availability",
+        "check_availability": "check_availability",
         "lookup_appointment": "lookup_appointment",
-        "reschedule_appointment": "check_availability",
         "chat": END  
     }
 )
