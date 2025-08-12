@@ -160,7 +160,7 @@ def should_continue_chatting(state: AgentState) -> dict:
         SystemMessage(content="""
             You are deciding the next action in a conversation.
 
-            Reply ONLY with: 'schedule_call', 'check_availability', 'lookup_appointment', 'reschedule_appointment', or 'chat'.
+            Reply ONLY with: 'schedule_call', 'lookup_appointment', 'reschedule_appointment', or 'chat'.
 
             Respond with 'schedule_call' ONLY if the user clearly asks to schedule, book, or set up a time to talk.
 
@@ -185,12 +185,6 @@ def should_continue_chatting(state: AgentState) -> dict:
             - "I'd like to talk to someone."
             - "How do I book a time?"
 
-            Examples of 'check_availability':
-            - "Is next wednesday at 11am available?"
-            - "Can you check if that time works?"
-            - "Is that slot open?"
-            - "Do you have availability at that time?"
-
             Examples of 'lookup_appointment':
             - "What time is my appointment?"
             - "When am I scheduled?"
@@ -212,25 +206,9 @@ def should_continue_chatting(state: AgentState) -> dict:
     
     # Now check requirements for each action
     if decision == "schedule_call":
-        # For scheduling, we need both name and datetime
-        name = state.get("form_data", {}).get("name")
-        datetime_str = state.get("form_data", {}).get("datetime_str")
-        
-        if not (name and datetime_str):
-            print("🛑 Missing info for scheduling — keep chatting.")
-            state["next"] = "chat"
-        else:
-            state["next"] = "schedule_call"
-            
-    elif decision == "check_availability":
-        # For availability checking, we need a datetime to check
-        datetime_str = state.get("form_data", {}).get("datetime_str")
-        
-        if not datetime_str:
-            print("🛑 No datetime provided for availability check — keep chatting.")
-            state["next"] = "chat"
-        else:
-            state["next"] = "check_availability"
+        # For scheduling, always check availability first to show available slots
+        print("🎯 User wants to schedule - routing to availability check")
+        state["next"] = "check_availability"
             
     elif decision == "lookup_appointment":
         # For lookup, we need either name or email
@@ -256,7 +234,8 @@ def should_continue_chatting(state: AgentState) -> dict:
             print("🛑 Missing new datetime for rescheduling — keep chatting.")
             state["next"] = "chat"
         else:
-            state["next"] = "reschedule_appointment"
+            print("🔄 User wants to reschedule - routing to availability check")
+            state["next"] = "check_availability"
             
     else:
         state["next"] = "chat"
@@ -337,76 +316,7 @@ def check_availability_node(state: AgentState) -> AgentState:
     """Node for checking available appointment slots and recommending times."""
     print(f"📍 Node: check_availability")
     
-    form_data = state.get("form_data", {})
-    datetime_str = form_data.get("datetime_str")
-    
-    # If user provided a specific time, check that slot first
-    if datetime_str:
-        print(f"🔍 Checking availability for specific slot: {datetime_str}")
-        
-        # Parse the datetime to get ISO format
-        parsed_datetime = parse_datetime_with_llm(datetime_str)
-        if parsed_datetime:
-            iso_datetime = parsed_datetime.isoformat()
-            print(f"✅ Parsed datetime: {datetime_str} → {iso_datetime}")
-            
-            # Check if this specific slot is available
-            availability_result = check_slot_available(iso_datetime)
-            
-            if availability_result["available"]:
-                # Slot is available - ask for more info
-                response = (
-                    f"✅ {availability_result['message']}\n\n"
-                    f"Great! That time works. To complete your booking, I'll need:\n"
-                    f"• Your name\n"
-                    f"• Your business name\n"
-                    f"• Your address\n"
-                    f"• Your phone number\n"
-                    f"• Your email\n\n"
-                    f"What's your name?"
-                )
-                state["messages"].append(AIMessage(content=response))
-                return state
-            else:
-                # Slot is not available - show alternatives
-                print(f"❌ Slot not available: {availability_result['message']}")
-                
-                # Get alternative slots
-                available_slots = get_available_slots_next_week()
-                
-                if available_slots:
-                    slots_text = []
-                    for i, slot in enumerate(available_slots, 1):
-                        slots_text.append(f"{i}. {slot['display']}")
-                    
-                    slots_display = "\n".join(slots_text)
-                    
-                    response = (
-                        f"❌ {availability_result['message']}\n\n"
-                        f"Here are some alternative times that are available:\n\n"
-                        f"{slots_display}\n\n"
-                        f"You can:\n"
-                        f"• Pick one of these times by saying the number (1, 2, or 3)\n"
-                        f"• Suggest a different time within business hours (10 AM - 4 PM Central)\n\n"
-                        f"What would you prefer?"
-                    )
-                else:
-                    response = (
-                        f"❌ {availability_result['message']}\n\n"
-                        f"I'm having trouble finding alternative slots right now. "
-                        f"Please try suggesting a different time within business hours (10 AM - 4 PM Central)."
-                    )
-                
-                state["messages"].append(AIMessage(content=response))
-                return state
-        else:
-            # Couldn't parse the datetime
-            response = "I couldn't understand that date and time. Could you rephrase it?"
-            state["messages"].append(AIMessage(content=response))
-            return state
-    
-    # If no specific time provided, show general availability
-    print("🔍 No specific time provided - showing general availability")
+    # Get available slots for the next week
     available_slots = get_available_slots_next_week()
     
     if not available_slots:
@@ -424,14 +334,87 @@ def check_availability_node(state: AgentState) -> AgentState:
     
     slots_display = "\n".join(slots_text)
     
+    # Check if we have a datetime_str to validate
+    form_data = state.get("form_data", {})
+    datetime_str = form_data.get("datetime_str")
+    
+    if datetime_str:
+        # User provided a specific time - check if it's available
+        print(f"🔍 Checking availability for specific slot: {datetime_str}")
+        
+        parsed_datetime = parse_datetime_with_llm(datetime_str)
+        if parsed_datetime:
+            iso_datetime = parsed_datetime.isoformat()
+            print(f"✅ Parsed datetime: {datetime_str} → {iso_datetime}")
+            
+            # Check if this specific slot is available
+            availability_result = check_slot_available(iso_datetime)
+            
+            if availability_result["available"]:
+                # Slot is available - check if we have all the info needed
+                name = form_data.get("name")
+                business_name = form_data.get("business_name")
+                address = form_data.get("address")
+                phone = form_data.get("phone")
+                email = form_data.get("email")
+                
+                missing = []
+                if not name:
+                    missing.append("name")
+                if not business_name:
+                    missing.append("business name")
+                if not address:
+                    missing.append("address")
+                if not phone:
+                    missing.append("phone")
+                if not email:
+                    missing.append("email")
+                
+                if missing:
+                    # Still need more info
+                    response = (
+                        f"✅ {availability_result['message']}\n\n"
+                        f"Perfect! That time works. To complete your booking, I still need:\n"
+                        f"• {', '.join(missing)}\n\n"
+                        f"What's your {'name' if 'name' in missing else 'business name' if 'business_name' in missing else 'address' if 'address' in missing else 'phone' if 'phone' in missing else 'email'}?"
+                    )
+                    state["messages"].append(AIMessage(content=response))
+                    return state
+                else:
+                    # We have all the info - proceed to booking
+                    print("🎯 All info collected - proceeding to booking")
+                    return run_booking_tool(state)
+            else:
+                # Slot is not available - show alternatives
+                response = (
+                    f"❌ {availability_result['message']}\n\n"
+                    f"Here are some alternative times that are available:\n\n"
+                    f"{slots_display}\n\n"
+                    f"**If these times don't work, we are available Monday through Friday, 10 AM - 4 PM Central Time.**\n\n"
+                    f"You can:\n"
+                    f"• Pick one of these times by saying the number (1, 2, or 3)\n"
+                    f"• Suggest a different time within business hours\n\n"
+                    f"What would you prefer?"
+                )
+                state["messages"].append(AIMessage(content=response))
+                return state
+        else:
+            # Couldn't parse the datetime
+            response = "I couldn't understand that date and time. Could you rephrase it?"
+            state["messages"].append(AIMessage(content=response))
+            return state
+    
+    # No specific time provided - show general availability
+    print("🔍 No specific time provided - showing general availability")
+    
     response = (
         f"🎯 Here are 3 available appointment slots for the next week:\n\n"
         f"{slots_display}\n\n"
-        f"**Please note:** I cannot schedule appointments within 48 hours of now.\n\n"
+        f"**Please note:** I cannot schedule appointments within 48 hours of now.\n"
+        f"**If these times don't work, we are available Monday through Friday, 10 AM - 4 PM Central Time.**\n\n"
         f"You can:\n"
         f"• Pick one of these times by saying the number (1, 2, or 3)\n"
-        f"• Suggest a different time within business hours (10 AM - 4 PM Central)\n"
-        f"• Ask me to check availability for a different week\n\n"
+        f"• Suggest a different time within business hours\n\n"
         f"What would you prefer?"
     )
     
@@ -525,12 +508,9 @@ builder = StateGraph(AgentState)
 #---- Nodes ----
 #booking_tool_node = ToolNode([create_calendar_event])
 builder.add_node("chat", chat_with_user)
-# builder.add_node("schedule_call", alfred_booking_tool)
-builder.add_node("schedule_call", run_booking_tool)
 builder.add_node("should_continue_chatting", should_continue_chatting)
 builder.add_node("check_availability", check_availability_node)
 builder.add_node("lookup_appointment", lookup_appointment)
-builder.add_node("reschedule_appointment", reschedule_appointment_node)
 
 
 builder.set_entry_point("chat")
@@ -539,17 +519,14 @@ builder.add_conditional_edges(
     "should_continue_chatting",
     lambda state: state["next"],
     {
-        "schedule_call": "schedule_call",
-        "check_availability": "check_availability",
+        "schedule_call": "check_availability",
         "lookup_appointment": "lookup_appointment",
-        "reschedule_appointment": "reschedule_appointment",
+        "reschedule_appointment": "check_availability",
         "chat": END  
     }
 )
-builder.add_edge("schedule_call", END)
 builder.add_edge("check_availability", "should_continue_chatting")
 builder.add_edge("lookup_appointment", END)
-builder.add_edge("reschedule_appointment", END)
 
 
 
