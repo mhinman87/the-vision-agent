@@ -345,6 +345,7 @@ def check_availability_node(state: AgentState) -> AgentState:
         for msg in reversed(recent_messages[-3:]):  # Check last 3 messages
             if msg.type == "human":
                 content = msg.content.strip().lower()
+                print(f"🔍 Checking message for slot selection: '{content}'")
                 # Check for number selections (1, 2, or 3)
                 if content in ["1", "2", "3", "one", "two", "three"]:
                     try:
@@ -357,7 +358,10 @@ def check_availability_node(state: AgentState) -> AgentState:
                             form_data["datetime_str"] = datetime_str
                             state["form_data"] = form_data
                             break
-                    except (ValueError, KeyError, IndexError):
+                        else:
+                            print(f"⚠️ Invalid slot index: {slot_index}, available slots: {len(available_slots)}")
+                    except (ValueError, KeyError, IndexError) as e:
+                        print(f"⚠️ Error processing slot selection: {e}")
                         pass
     
     if datetime_str:
@@ -380,6 +384,13 @@ def check_availability_node(state: AgentState) -> AgentState:
                 phone = form_data.get("phone")
                 email = form_data.get("email")
                 
+                print(f"🔍 Checking required fields:")
+                print(f"  - name: {name}")
+                print(f"  - business_name: {business_name}")
+                print(f"  - address: {address}")
+                print(f"  - phone: {phone}")
+                print(f"  - email: {email}")
+                
                 missing = []
                 if not name:
                     missing.append("name")
@@ -391,6 +402,8 @@ def check_availability_node(state: AgentState) -> AgentState:
                     missing.append("phone")
                 if not email:
                     missing.append("email")
+                
+                print(f"🛑 Missing fields: {missing}")
                 
                 if missing:
                     # Still need more info

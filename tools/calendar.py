@@ -339,7 +339,7 @@ def get_available_slots_next_week() -> list:
                 # Mark the hour as busy
                 busy_slots.add(event_start.replace(minute=0, second=0, microsecond=0))
         
-        # Generate available slots
+        # Generate available slots for the next week, but spread them out
         available_slots = []
         current_time = buffer_time
         
@@ -364,12 +364,20 @@ def get_available_slots_next_week() -> list:
                     print(f"✅ Available slot: {current_time.strftime('%A, %B %-d at %-I:%M %p')}")
                     slot_count += 1
                     
-                    # Skip ahead to spread out the slots (every 2-3 hours or next day)
+                    # Skip ahead to spread out the slots more aggressively
                     if slot_count < 3:
-                        if current_time.hour < 13:  # Morning slots
-                            current_time += timedelta(hours=2)  # Skip 2 hours
-                        else:  # Afternoon slots
+                        # For first slot, skip 3-4 hours or go to next day
+                        if slot_count == 1:
+                            if current_time.hour < 12:  # Morning
+                                current_time += timedelta(hours=4)  # Skip to afternoon
+                            else:  # Afternoon
+                                current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                        # For second slot, go to next day
+                        elif slot_count == 2:
                             current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                        # For third slot, go to day after next
+                        else:
+                            current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=2)
                 else:
                     # Move to next hour if this one is busy
                     current_time += timedelta(hours=1)
