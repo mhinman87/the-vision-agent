@@ -578,7 +578,17 @@ builder.add_conditional_edges(
         "chat": END  
     }
 )
-builder.add_edge("check_availability", "should_continue_chatting")
+
+# Add conditional edges from check_availability
+builder.add_conditional_edges(
+    "check_availability",
+    lambda state: state.get("next", "chat"),
+    {
+        "reschedule_appointment": "reschedule_appointment",
+        "chat": "should_continue_chatting"
+    }
+)
+
 builder.add_edge("lookup_appointment", END)
 builder.add_edge("reschedule_appointment", END)
 
