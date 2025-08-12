@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from collections import defaultdict
-from tools.calendar import create_calendar_event, get_upcoming_event, reschedule_appointment, parse_datetime_with_llm, get_available_slots_next_week
+from tools.calendar import create_calendar_event, get_upcoming_event, reschedule_appointment, parse_datetime_with_llm, get_available_slots_next_week, check_slot_available
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import MessagesState
 from langchain_core.messages import HumanMessage
@@ -321,7 +321,76 @@ def check_availability_node(state: AgentState) -> AgentState:
     """Node for checking available appointment slots and recommending times."""
     print(f"📍 Node: check_availability")
     
-    # Get available slots for the next week
+    form_data = state.get("form_data", {})
+    datetime_str = form_data.get("datetime_str")
+    
+    # If user provided a specific time, check that slot first
+    if datetime_str:
+        print(f"🔍 Checking availability for specific slot: {datetime_str}")
+        
+        # Parse the datetime to get ISO format
+        parsed_datetime = parse_datetime_with_llm(datetime_str)
+        if parsed_datetime:
+            iso_datetime = parsed_datetime.isoformat()
+            print(f"✅ Parsed datetime: {datetime_str} → {iso_datetime}")
+            
+            # Check if this specific slot is available
+            availability_result = check_slot_available(iso_datetime)
+            
+            if availability_result["available"]:
+                # Slot is available - ask for more info
+                response = (
+                    f"✅ {availability_result['message']}\n\n"
+                    f"Great! That time works. To complete your booking, I'll need:\n"
+                    f"• Your name\n"
+                    f"• Your business name\n"
+                    f"• Your address\n"
+                    f"• Your phone number\n"
+                    f"• Your email\n\n"
+                    f"What's your name?"
+                )
+                state["messages"].append(AIMessage(content=response))
+                return state
+            else:
+                # Slot is not available - show alternatives
+                print(f"❌ Slot not available: {availability_result['message']}")
+                
+                # Get alternative slots
+                available_slots = get_available_slots_next_week()
+                
+                if available_slots:
+                    slots_text = []
+                    for i, slot in enumerate(available_slots, 1):
+                        slots_text.append(f"{i}. {slot['display']}")
+                    
+                    slots_display = "\n".join(slots_text)
+                    
+                    response = (
+                        f"❌ {availability_result['message']}\n\n"
+                        f"Here are some alternative times that are available:\n\n"
+                        f"{slots_display}\n\n"
+                        f"You can:\n"
+                        f"• Pick one of these times by saying the number (1, 2, or 3)\n"
+                        f"• Suggest a different time within business hours (10 AM - 4 PM Central)\n\n"
+                        f"What would you prefer?"
+                    )
+                else:
+                    response = (
+                        f"❌ {availability_result['message']}\n\n"
+                        f"I'm having trouble finding alternative slots right now. "
+                        f"Please try suggesting a different time within business hours (10 AM - 4 PM Central)."
+                    )
+                
+                state["messages"].append(AIMessage(content=response))
+                return state
+        else:
+            # Couldn't parse the datetime
+            response = "I couldn't understand that date and time. Could you rephrase it?"
+            state["messages"].append(AIMessage(content=response))
+            return state
+    
+    # If no specific time provided, show general availability
+    print("🔍 No specific time provided - showing general availability")
     available_slots = get_available_slots_next_week()
     
     if not available_slots:

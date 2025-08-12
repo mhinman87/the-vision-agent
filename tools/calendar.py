@@ -386,4 +386,75 @@ def get_available_slots_next_week() -> list:
         return []
 
 
+def check_slot_available(datetime_str: str) -> dict:
+    """
+    Checks if a specific datetime slot is available for booking.
+    
+    Args:
+        datetime_str: ISO 8601 datetime string to check
+        
+    Returns:
+        dict with 'available' (bool) and 'message' (str) keys
+    """
+    creds = get_persistent_credentials()
+    if not creds:
+        print("❌ No credentials available for availability check.")
+        return {"available": False, "message": "❌ Calendar authorization token missing."}
+
+    try:
+        # Parse the datetime to check
+        slot_start = datetime.fromisoformat(datetime_str)
+        slot_end = slot_start + timedelta(hours=1)
+        
+        # Validate business hours (10 AM - 4 PM Central)
+        if not (10 <= slot_start.hour < 16):
+            return {
+                "available": False, 
+                "message": "❌ I can only schedule appointments between 10 AM and 4 PM Central Time."
+            }
+        
+        # Check if the slot is in the past or too soon (48-hour buffer)
+        now = datetime.now()
+        buffer_time = now + timedelta(hours=48)
+        
+        if slot_start < buffer_time:
+            return {
+                "available": False,
+                "message": "❌ I need at least 48 hours notice to schedule appointments."
+            }
+        
+        service = build("calendar", "v3", credentials=creds)
+        
+        # Check for conflicts in the calendar
+        events_result = service.events().list(
+            calendarId='primary',
+            timeMin=slot_start.isoformat() + 'Z',
+            timeMax=slot_end.isoformat() + 'Z',
+            singleEvents=True
+        ).execute()
+        
+        conflicting_events = events_result.get('items', [])
+        
+        if conflicting_events:
+            # There are conflicting events
+            conflict_summary = conflicting_events[0].get('summary', 'Another meeting')
+            return {
+                "available": False,
+                "message": f"❌ That time slot is not available. There's a conflict with: {conflict_summary}"
+            }
+        else:
+            # Slot is available
+            return {
+                "available": True,
+                "message": f"✅ {slot_start.strftime('%A, %B %-d at %-I:%M %p')} is available!"
+            }
+            
+    except Exception as e:
+        print(f"❌ Error checking slot availability: {e}")
+        return {
+            "available": False,
+            "message": f"❌ Error checking availability: {str(e)}"
+        }
+
+
 
