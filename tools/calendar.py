@@ -18,13 +18,16 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
 def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
-    today = datetime.now().strftime("%A, %B %d, %Y")
-    print(f"🧠 Asking LLM to convert '{natural_str}' based on today: {today}")
+    today = datetime.now()
+    today_str = today.strftime("%A, %B %d, %Y")
+    current_year = today.year
+    print(f"🧠 Asking LLM to convert '{natural_str}' based on today: {today_str}")
 
     system_prompt = (
-        f"You are a precise date parser. Today is {today}.\n"
+        f"You are a precise date parser. Today is {today_str}.\n"
+        f"IMPORTANT: You must use the year {current_year} or later. Never use previous years.\n"
         "Convert the provided natural language date/time into an ISO 8601 datetime string "
-        "(e.g. 2025-08-07T17:00:00). Return only the ISO string. Do not include any explanation."
+        f"(e.g. {current_year}-08-07T17:00:00). Return only the ISO string. Do not include any explanation."
     )
 
     llm = ChatOpenAI(model="gpt-4o")
@@ -34,10 +37,15 @@ def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
         HumanMessage(content=natural_str)
     ])
 
-    clean_str = response.content.strip()  # ✅ This is the fix
+    clean_str = response.content.strip()
 
     try:
         parsed = datetime.fromisoformat(clean_str)
+        
+        # Validate the year is current or future
+        if parsed.year < current_year:
+            print(f"❌ LLM returned past year: {parsed.year}, expected {current_year} or later")
+            return None
         
         # Validate business hours (Monday-Friday, 10 AM - 4 PM)
         if parsed.weekday() >= 5:  # Saturday = 5, Sunday = 6
@@ -322,7 +330,7 @@ def get_available_slots_next_week() -> list:
     
     # Calculate time boundaries
     now = datetime.now()
-    buffer_time = now + timedelta(hours=24)  # 24-hour buffer (1 day notice)
+    buffer_time = now + timedelta(hours=2)  # 2-hour buffer (same-day bookings allowed)
     week_end = now + timedelta(days=7)  # Next week
     
     print(f"🔍 Checking availability from {buffer_time.strftime('%A, %B %-d at %-I:%M %p')} to {week_end.strftime('%A, %B %-d at %-I:%M %p')}")
@@ -443,14 +451,14 @@ def check_slot_available(datetime_str: str) -> dict:
                 "message": "❌ I can only schedule appointments between 10 AM and 4 PM Central Time."
             }
         
-        # Check if the slot is in the past or too soon (24-hour buffer)
+        # Check if the slot is in the past or too soon (2-hour buffer)
         now = datetime.now()
-        buffer_time = now + timedelta(hours=24)
+        buffer_time = now + timedelta(hours=2)
         
         if slot_start < buffer_time:
             return {
                 "available": False,
-                "message": "❌ I need at least 24 hours notice to schedule appointments."
+                "message": "❌ I need at least 2 hours notice to schedule appointments."
             }
         
         service = build("calendar", "v3", credentials=creds)

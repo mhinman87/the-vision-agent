@@ -165,6 +165,16 @@ def should_continue_chatting(state: AgentState) -> dict:
             Respond with 'schedule_call' ONLY if the user clearly asks to schedule, book, or set up a time to talk. 
             If the user is just providing information (like a preferred time) without explicitly asking to book, respond with 'chat'.
             
+            Respond with 'schedule_call' if the user:
+            - Explicitly asks to schedule/book an appointment
+            - Provides a time AND asks to book it
+            - Says "book me for..." or "schedule me for..."
+            
+            Respond with 'chat' if the user:
+            - Just provides a time without asking to book
+            - Is responding to a question about availability
+            - Is providing information in conversation
+            
             Respond with 'reschedule_appointment' if the user asks to:
             - Reschedule their appointment
             - Change their appointment time
@@ -187,6 +197,8 @@ def should_continue_chatting(state: AgentState) -> dict:
             - "Can I schedule a call?"
             - "I'd like to talk to someone."
             - "How do I book a time?"
+            - "Book me for Monday at 11am"
+            - "Schedule me for Wednesday at 2pm"
 
             Examples of 'lookup_appointment':
             - "What time is my appointment?"
@@ -469,7 +481,7 @@ def check_availability_node(state: AgentState) -> AgentState:
             f"{existing_appointment_msg}\n\n"
             f"🎯 Here are 3 available appointment slots for the next week:\n\n"
             f"{slots_display}\n\n"
-            f"**Please note:** I cannot schedule appointments within 24 hours of now.\n"
+            f"**Please note:** I cannot schedule appointments within 2 hours of now.\n"
             f"**If these times don't work, we are available Monday through Friday, 10 AM - 4 PM Central Time.**\n\n"
             f"You can:\n"
             f"• Pick one of these times by saying the number (1, 2, or 3)\n"
@@ -480,7 +492,7 @@ def check_availability_node(state: AgentState) -> AgentState:
         response = (
             f"🎯 Here are 3 available appointment slots for the next week:\n\n"
             f"{slots_display}\n\n"
-            f"**Please note:** I cannot schedule appointments within 24 hours of now.\n"
+            f"**Please note:** I cannot schedule appointments within 2 hours of now.\n"
             f"**If these times don't work, we are available Monday through Friday, 10 AM - 4 PM Central Time.**\n\n"
             f"You can:\n"
             f"• Pick one of these times by saying the number (1, 2, or 3)\n"
