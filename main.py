@@ -356,10 +356,19 @@ def check_availability_node(state: AgentState) -> AgentState:
         for msg in reversed(recent_messages[-3:]):  # Check last 3 messages
             if msg.type == "human":
                 content = msg.content.strip().lower()
-                # Check for number selections (1, 2, or 3)
-                if content in ["1", "2", "3", "one", "two", "three"]:
+                # Check for number selections (1, 2, or 3) with variations
+                number_words = {
+                    "one": 1, "two": 2, "three": 3,
+                    "1": 1, "2": 2, "3": 3,
+                    "number 1": 1, "number 2": 2, "number 3": 3,
+                    "number one": 1, "number two": 2, "number three": 3,
+                    "let's do 1": 1, "let's do 2": 2, "let's do 3": 3,
+                    "let's do number 1": 1, "let's do number 2": 2, "let's do number 3": 3,
+                    "let's do one": 1, "let's do two": 2, "let's do three": 3
+                }
+                if content in number_words:
                     try:
-                        slot_index = int(content) if content.isdigit() else {"one": 1, "two": 2, "three": 3}[content]
+                        slot_index = number_words[content]
                         if 1 <= slot_index <= len(available_slots):
                             selected_slot = available_slots[slot_index - 1]
                             datetime_str = selected_slot["datetime"]
@@ -372,6 +381,15 @@ def check_availability_node(state: AgentState) -> AgentState:
                             if name or email:
                                 print("🔄 Selected slot for rescheduling - proceeding to reschedule")
                                 state["next"] = "reschedule_appointment"
+                                return state
+                            else:
+                                # For new bookings, ask for required info
+                                response = (
+                                    f"✅ Great choice! I'll schedule you for {selected_slot['display']}.\n\n"
+                                    "To complete your booking, I'll need some information from you.\n\n"
+                                    "What's your name?"
+                                )
+                                state["messages"].append(AIMessage(content=response))
                                 return state
                             break
                     except (ValueError, KeyError, IndexError) as e:
@@ -402,6 +420,11 @@ def check_availability_node(state: AgentState) -> AgentState:
                 
                 # For new bookings, check required fields
                 missing = []
+                business_name = form_data.get("business_name")
+                address = form_data.get("address")
+                phone = form_data.get("phone")
+                email = form_data.get("email")
+                
                 if not business_name:
                     missing.append("business name")
                 if not address:
@@ -649,9 +672,15 @@ async def vision_chat(request: Request, body: dict = Body(...)):
     # Save the updated state back to the session
     chat_sessions[session_id] = updated_state
 
-    # Append assistant reply
-    reply = updated_state["messages"][-1].content
-    chat_sessions[session_id]["messages"].append(AIMessage(content=reply))
+    # Get the last AI message
+    reply = None
+    for msg in reversed(updated_state["messages"]):
+        if msg.type == "ai":
+            reply = msg.content
+            break
+
+    if not reply:
+        reply = "I'm sorry, I encountered an error processing your request."
 
     return {"reply": reply}
 
