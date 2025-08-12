@@ -353,17 +353,26 @@ def get_available_slots_next_week() -> list:
         elif current_time.hour >= 16:
             current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
         
-        # Generate slots for the next week
-        while current_time < week_end and len(available_slots) < 3:
+        # Generate slots for the next week, but spread them out
+        slot_count = 0
+        while current_time < week_end and slot_count < 3:
             # Only consider business hours (10 AM - 4 PM)
             if 10 <= current_time.hour < 16:
                 # Check if this hour is available
                 if current_time not in busy_slots:
                     available_slots.append(current_time)
                     print(f"✅ Available slot: {current_time.strftime('%A, %B %-d at %-I:%M %p')}")
-                
-                # Move to next hour
-                current_time += timedelta(hours=1)
+                    slot_count += 1
+                    
+                    # Skip ahead to spread out the slots (every 2-3 hours or next day)
+                    if slot_count < 3:
+                        if current_time.hour < 13:  # Morning slots
+                            current_time += timedelta(hours=2)  # Skip 2 hours
+                        else:  # Afternoon slots
+                            current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                else:
+                    # Move to next hour if this one is busy
+                    current_time += timedelta(hours=1)
             else:
                 # Move to next business day
                 current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)

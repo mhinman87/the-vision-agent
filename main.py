@@ -338,6 +338,28 @@ def check_availability_node(state: AgentState) -> AgentState:
     form_data = state.get("form_data", {})
     datetime_str = form_data.get("datetime_str")
     
+    # Check if user selected a slot by number
+    if not datetime_str:
+        # Look for number selections in recent messages
+        recent_messages = state.get("messages", [])
+        for msg in reversed(recent_messages[-3:]):  # Check last 3 messages
+            if msg.type == "human":
+                content = msg.content.strip().lower()
+                # Check for number selections (1, 2, or 3)
+                if content in ["1", "2", "3", "one", "two", "three"]:
+                    try:
+                        slot_index = int(content) if content.isdigit() else {"one": 1, "two": 2, "three": 3}[content]
+                        if 1 <= slot_index <= len(available_slots):
+                            selected_slot = available_slots[slot_index - 1]
+                            datetime_str = selected_slot["datetime"]
+                            print(f"🎯 User selected slot {slot_index}: {selected_slot['display']}")
+                            # Update form_data with the selected datetime
+                            form_data["datetime_str"] = datetime_str
+                            state["form_data"] = form_data
+                            break
+                    except (ValueError, KeyError, IndexError):
+                        pass
+    
     if datetime_str:
         # User provided a specific time - check if it's available
         print(f"🔍 Checking availability for specific slot: {datetime_str}")
