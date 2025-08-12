@@ -160,7 +160,7 @@ def should_continue_chatting(state: AgentState) -> dict:
         SystemMessage(content="""
             You are deciding the next action in a conversation.
 
-            Reply ONLY with: 'schedule_call', 'lookup_appointment', 'reschedule_appointment', or 'chat'.
+            Reply ONLY with: 'schedule_call', 'check_availability', 'lookup_appointment', 'reschedule_appointment', or 'chat'.
 
             Respond with 'schedule_call' ONLY if the user clearly asks to schedule, book, or set up a time to talk.
 
@@ -184,6 +184,12 @@ def should_continue_chatting(state: AgentState) -> dict:
             - "Can I schedule a call?"
             - "I'd like to talk to someone."
             - "How do I book a time?"
+
+            Examples of 'check_availability':
+            - "Is next wednesday at 11am available?"
+            - "Can you check if that time works?"
+            - "Is that slot open?"
+            - "Do you have availability at that time?"
 
             Examples of 'lookup_appointment':
             - "What time is my appointment?"
@@ -215,6 +221,16 @@ def should_continue_chatting(state: AgentState) -> dict:
             state["next"] = "chat"
         else:
             state["next"] = "schedule_call"
+            
+    elif decision == "check_availability":
+        # For availability checking, we need a datetime to check
+        datetime_str = state.get("form_data", {}).get("datetime_str")
+        
+        if not datetime_str:
+            print("🛑 No datetime provided for availability check — keep chatting.")
+            state["next"] = "chat"
+        else:
+            state["next"] = "check_availability"
             
     elif decision == "lookup_appointment":
         # For lookup, we need either name or email
@@ -512,6 +528,7 @@ builder.add_node("chat", chat_with_user)
 # builder.add_node("schedule_call", alfred_booking_tool)
 builder.add_node("schedule_call", run_booking_tool)
 builder.add_node("should_continue_chatting", should_continue_chatting)
+builder.add_node("check_availability", check_availability_node)
 builder.add_node("lookup_appointment", lookup_appointment)
 builder.add_node("reschedule_appointment", reschedule_appointment_node)
 
@@ -523,12 +540,14 @@ builder.add_conditional_edges(
     lambda state: state["next"],
     {
         "schedule_call": "schedule_call",
+        "check_availability": "check_availability",
         "lookup_appointment": "lookup_appointment",
         "reschedule_appointment": "reschedule_appointment",
         "chat": END  
     }
 )
 builder.add_edge("schedule_call", END)
+builder.add_edge("check_availability", "should_continue_chatting")
 builder.add_edge("lookup_appointment", END)
 builder.add_edge("reschedule_appointment", END)
 
