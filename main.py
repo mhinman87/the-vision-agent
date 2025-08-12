@@ -19,7 +19,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.messages import SystemMessage
 from typing import Dict
 from state.agent_state import AgentState
-from llm_config import llm, llm_with_tools
+from llm_config import llm, llm_with_tools, classifier_llm
 from nodes.booking import run_booking_tool
 from nodes.lookup import lookup_appointment
 
