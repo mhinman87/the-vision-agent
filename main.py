@@ -144,16 +144,9 @@ def chat_with_user(state: AgentState) -> AgentState:
     return state
 
 
-def should_continue_chatting(state: AgentState) -> dict:
-    print("📍 Node: should_continue_chatting")
-    print("🚨 NEW CODE IS RUNNING - VERSION 2.0!")
-    print(f"🔍 DEBUG: Full state form_data: {state.get('form_data', {})}")
-    print(f"🔍 DEBUG: State ID: {id(state)}")
-    print(f"🔍 DEBUG: State keys: {list(state.keys())}")
-    print(f"🔍 DEBUG: form_data type: {type(state.get('form_data'))}")
-    print(f"🔍 DEBUG: form_data ID: {id(state.get('form_data', {}))}")
-    print(f"🔍 DEBUG: form_data content: {state.get('form_data', {})}")
-
+def should_continue_chatting(state: AgentState) -> AgentState:
+    print(f"📍 Node: should_continue_chatting")
+    
     # First, determine what the user wants to do
     recent_messages = state["messages"][-3:]
     response = classifier_llm.invoke([
@@ -382,7 +375,6 @@ def check_availability_node(state: AgentState) -> AgentState:
         for msg in reversed(recent_messages[-3:]):  # Check last 3 messages
             if msg.type == "human":
                 content = msg.content.strip().lower()
-                print(f"🔍 Checking message for slot selection: '{content}'")
                 # Check for number selections (1, 2, or 3)
                 if content in ["1", "2", "3", "one", "two", "three"]:
                     try:
@@ -395,10 +387,7 @@ def check_availability_node(state: AgentState) -> AgentState:
                             form_data["datetime_str"] = datetime_str
                             state["form_data"] = form_data
                             break
-                        else:
-                            print(f"⚠️ Invalid slot index: {slot_index}, available slots: {len(available_slots)}")
                     except (ValueError, KeyError, IndexError) as e:
-                        print(f"⚠️ Error processing slot selection: {e}")
                         pass
     
     if datetime_str:
@@ -419,13 +408,6 @@ def check_availability_node(state: AgentState) -> AgentState:
                 address = form_data.get("address")
                 phone = form_data.get("phone")
                 
-                print(f"🔍 Checking required fields:")
-                print(f"  - name: {name}")
-                print(f"  - business_name: {business_name}")
-                print(f"  - address: {address}")
-                print(f"  - phone: {phone}")
-                print(f"  - email: {email}")
-                
                 missing = []
                 if not business_name:
                     missing.append("business name")
@@ -435,8 +417,6 @@ def check_availability_node(state: AgentState) -> AgentState:
                     missing.append("phone")
                 if not email:
                     missing.append("email")
-                
-                print(f"🛑 Missing fields: {missing}")
                 
                 if missing:
                     # Still need more info
@@ -511,9 +491,6 @@ def check_availability_node(state: AgentState) -> AgentState:
 
 def run_booking_tool(state: AgentState) -> AgentState:
     print("📍 Node: run_booking_tool")
-    print("🚨 BOOKING NODE IS ACTUALLY RUNNING!")
-    print(f"🔍 DEBUG: Booking node received state keys: {list(state.keys())}")
-    print(f"🔍 DEBUG: Booking node received form_data: {state.get('form_data', {})}")
     form_data = state.get("form_data", {})
 
     # Gather fields
@@ -658,8 +635,6 @@ async def vision_chat(request: Request, body: dict = Body(...)):
 
     # Run the graph
     updated_state = graph.invoke(state)
-    print(f"🔍 DEBUG: Graph returned state keys: {list(updated_state.keys())}")
-    print(f"🔍 DEBUG: Graph returned form_data: {updated_state.get('form_data', {})}")
 
     # Save the updated state back to the session
     chat_sessions[session_id] = updated_state
