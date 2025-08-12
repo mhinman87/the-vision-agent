@@ -87,6 +87,8 @@ def chat_with_user(state: AgentState) -> AgentState:
     response = llm_with_tools.invoke(state["messages"])
     ai_msg = response.content.strip()
     state["messages"].append(AIMessage(content=ai_msg))
+    
+    print(f"🤖 Alfred said: {ai_msg}")
 
     # Only initialize if not already present
     if "form_data" not in state:
@@ -98,6 +100,8 @@ def chat_with_user(state: AgentState) -> AgentState:
         if msg.type == "human":
             last_user_message = msg.content
             break
+
+    print(f"👤 User said: {last_user_message}")
 
     # Prompt to extract field updates
     extract_prompt = [
@@ -124,7 +128,7 @@ def chat_with_user(state: AgentState) -> AgentState:
     try:
         extract_response = llm_with_tools.invoke(extract_prompt)
         raw = extract_response.content.strip()
-        print("🧠 LLM extracted:\n" + raw)
+        print(f"🔍 Form data extracted from user message: {raw}")
 
         for line in raw.splitlines():
             if ":" in line:
@@ -134,7 +138,7 @@ def chat_with_user(state: AgentState) -> AgentState:
                 if key in ["name", "datetime_str", "business_name", "address", "phone", "email"]:
                     state["form_data"][key] = value
 
-        print("🎒 Updated form_data:", state["form_data"])
+        print(f"📝 Form data updated: {state['form_data']}")
 
     except Exception as e:
         print(f"⚠️ Extraction failed: {e}")
