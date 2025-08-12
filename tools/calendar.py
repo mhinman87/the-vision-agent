@@ -133,9 +133,9 @@ def create_calendar_event(
             f"✅ You're all set, {name}!\n\n"
             f"Thank you for your interest in Ghost Stack.\n\n"
             f"📅 Your appointment is scheduled for {parsed_start.strftime('%A, %B %-d at %-I:%M %p')}\n\n"
-            f"I’ve also sent a confirmation email to {email} with a link to the event.\n\n"
-            f"This meeting is currently set as **in-person**, and Max will come to your location. He’ll also reach out about an hour beforehand to confirm you're still available.\n\n"
-            f"Thanks again for checking out Ghost Stack and our AI Agents — we’re excited to connect!"
+            f"I've also sent a confirmation email to {email} with a link to the event.\n\n"
+            f"This meeting is currently set as **in-person**, and Max will come to your location. He'll also reach out about an hour beforehand to confirm you're still available.\n\n"
+            f"Thanks again for checking out Ghost Stack and our AI Agents — we're excited to connect!"
         )
 
 
@@ -193,6 +193,108 @@ def get_upcoming_event(name=None, email=None):
         print(f"❌ Failed to fetch calendar events: {e}")
 
     return None
+
+
+def reschedule_appointment(
+    name: Optional[str],
+    email: Optional[str],
+    new_datetime_str: Optional[str]
+) -> str:
+    """
+    Reschedules an existing calendar event to a new time.
+    Requires name/email to find the event and new datetime to reschedule to.
+    """
+    # Validate required fields
+    if not new_datetime_str:
+        return "❌ Please provide the new date and time for your appointment."
+    
+    if not name and not email:
+        return "❌ I need your name or email to find your appointment to reschedule."
+
+    print(f"🔄 Attempting to reschedule appointment for {name or email} to {new_datetime_str}")
+
+    try:
+        # Parse the new datetime
+        parsed_new_start = datetime.fromisoformat(new_datetime_str)
+        parsed_new_end = parsed_new_start + timedelta(hours=1)
+        
+        # Validate business hours (10 AM - 4 PM Central)
+        if not (10 <= parsed_new_start.hour < 16):
+            return "❌ I can only schedule appointments between 10 AM and 4 PM Central Time. Please choose a different time."
+            
+    except Exception as e:
+        print(f"❌ Failed to parse new datetime: {new_datetime_str} — {e}")
+        return "❌ I couldn't understand that date and time. Please provide it in a clear format."
+
+    # Get credentials
+    creds = get_persistent_credentials()
+    if not creds:
+        return "❌ Calendar authorization token missing."
+
+    try:
+        service = build("calendar", "v3", credentials=creds)
+        
+        # First, find the existing event
+        now = datetime.utcnow().isoformat() + 'Z'
+        events_result = service.events().list(
+            calendarId='primary',
+            timeMin=now,
+            maxResults=10,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+
+        events = events_result.get('items', [])
+        target_event = None
+
+        # Find the event to reschedule
+        for event in events:
+            summary = event.get('summary', '').lower()
+            description = event.get('description', '').lower()
+            
+            if (name and name.lower() in summary) or (email and email.lower() in description):
+                target_event = event
+                break
+
+        if not target_event:
+            return f"❌ I couldn't find any upcoming appointments for {name or email}."
+
+        # Update the event with new time
+        event_id = target_event['id']
+        
+        updated_event = {
+            'summary': target_event['summary'],
+            'description': target_event['description'],
+            'start': {
+                'dateTime': parsed_new_start.isoformat(),
+                'timeZone': 'America/Chicago',
+            },
+            'end': {
+                'dateTime': parsed_new_end.isoformat(),
+                'timeZone': 'America/Chicago',
+            },
+            'attendees': target_event.get('attendees', [])
+        }
+
+        # Update the event
+        updated_event = service.events().update(
+            calendarId='primary',
+            eventId=event_id,
+            body=updated_event
+        ).execute()
+
+        print(f"✅ Event rescheduled: {updated_event.get('htmlLink')}")
+        
+        return (
+            f"✅ Appointment rescheduled successfully!\n\n"
+            f"📅 Your new appointment time is {parsed_new_start.strftime('%A, %B %-d at %-I:%M %p')}\n\n"
+            f"You'll receive an updated calendar invitation via email.\n\n"
+            f"Let me know if you need anything else!"
+        )
+
+    except Exception as e:
+        print(f"❌ Failed to reschedule appointment: {e}")
+        return f"❌ Sorry, I encountered an error while rescheduling: {str(e)}"
 
 
 

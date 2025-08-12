@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from collections import defaultdict
-from tools.calendar import create_calendar_event, get_upcoming_event
+from tools.calendar import create_calendar_event, get_upcoming_event, reschedule_appointment
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import MessagesState
 from langchain_core.messages import HumanMessage
@@ -160,7 +160,7 @@ def should_continue_chatting(state: AgentState) -> dict:
         SystemMessage(content="""
             You are deciding the next action in a conversation.
 
-            Reply ONLY with: 'schedule_call', 'lookup_appointment', or 'chat'.
+            Reply ONLY with: 'schedule_call', 'lookup_appointment', 'reschedule_appointment', or 'chat'.
 
             Respond with 'schedule_call' ONLY if the user clearly asks to schedule, book, or set up a time to talk.
 
@@ -172,6 +172,14 @@ def should_continue_chatting(state: AgentState) -> dict:
             - "What time is my appointment?"
             - "When am I scheduled?"
 
+            Respond with 'reschedule_appointment' if the user asks to:
+            - Reschedule their appointment
+            - Change their appointment time
+            - Move their meeting to a different time
+            - "Can you reschedule my appointment?"
+            - "I need to change my appointment time"
+            - "Can we move this to a different time?"
+
             Examples of 'schedule_call':
             - "Can I schedule a call?"
             - "I'd like to talk to someone."
@@ -182,6 +190,12 @@ def should_continue_chatting(state: AgentState) -> dict:
             - "When am I scheduled?"
             - "Can you look up my booking?"
             - "What's my meeting time?"
+
+            Examples of 'reschedule_appointment':
+            - "Can you reschedule my appointment?"
+            - "I need to change my appointment time"
+            - "Can we move this to a different time?"
+            - "I'd like to reschedule"
 
             If the user is asking questions, chatting, or learning more, respond with 'chat'.
         """)
@@ -212,6 +226,21 @@ def should_continue_chatting(state: AgentState) -> dict:
             state["next"] = "chat"
         else:
             state["next"] = "lookup_appointment"
+            
+    elif decision == "reschedule_appointment":
+        # For rescheduling, we need name/email AND new datetime
+        name = state.get("form_data", {}).get("name")
+        email = state.get("form_data", {}).get("email")
+        datetime_str = state.get("form_data", {}).get("datetime_str")
+        
+        if not (name or email):
+            print("🛑 Missing name or email for rescheduling — keep chatting.")
+            state["next"] = "chat"
+        elif not datetime_str:
+            print("🛑 Missing new datetime for rescheduling — keep chatting.")
+            state["next"] = "chat"
+        else:
+            state["next"] = "reschedule_appointment"
             
     else:
         state["next"] = "chat"
@@ -248,6 +277,32 @@ def lookup_appointment(state: AgentState) -> AgentState:
     return state
 
 
+def reschedule_appointment_node(state: AgentState) -> AgentState:
+    print("📍 Node: reschedule_appointment_node")
+    
+    # Get the current form data
+    name = state.get("form_data", {}).get("name")
+    email = state.get("form_data", {}).get("email")
+    datetime_str = state.get("form_data", {}).get("datetime_str")
+    
+    print(f"🔄 Rescheduling appointment for {name or email} to {datetime_str}")
+    
+    # Call the reschedule tool
+    result = reschedule_appointment(
+        name=name,
+        email=email,
+        new_datetime_str=datetime_str
+    )
+    
+    # Add the result to the messages
+    state["messages"].append(AIMessage(content=result))
+    
+    # Clear the form data after rescheduling
+    state["form_data"] = {}
+    
+    return state
+
+
 # --- Graph setup ---
 builder = StateGraph(AgentState)
 
@@ -258,6 +313,7 @@ builder.add_node("chat", chat_with_user)
 builder.add_node("schedule_call", run_booking_tool)
 builder.add_node("should_continue_chatting", should_continue_chatting)
 builder.add_node("lookup_appointment", lookup_appointment)
+builder.add_node("reschedule_appointment", reschedule_appointment_node)
 
 
 builder.set_entry_point("chat")
@@ -268,11 +324,13 @@ builder.add_conditional_edges(
     {
         "schedule_call": "schedule_call",
         "lookup_appointment": "lookup_appointment",
+        "reschedule_appointment": "reschedule_appointment",
         "chat": END  
     }
 )
 builder.add_edge("schedule_call", END)
 builder.add_edge("lookup_appointment", END)
+builder.add_edge("reschedule_appointment", END)
 
 
 
