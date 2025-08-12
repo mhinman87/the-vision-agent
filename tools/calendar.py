@@ -38,6 +38,16 @@ def parse_datetime_with_llm(natural_str: str) -> Optional[datetime]:
 
     try:
         parsed = datetime.fromisoformat(clean_str)
+        
+        # Validate business hours (Monday-Friday, 10 AM - 4 PM)
+        if parsed.weekday() >= 5:  # Saturday = 5, Sunday = 6
+            print(f"❌ Weekend appointment rejected: {parsed.strftime('%A, %B %-d at %-I:%M %p')}")
+            return None
+            
+        if not (10 <= parsed.hour < 16):
+            print(f"❌ Non-business hours rejected: {parsed.strftime('%A, %B %-d at %-I:%M %p')}")
+            return None
+            
         return parsed
     except Exception as e:
         print(f"❌ LLM returned invalid ISO: {clean_str} — {e}")

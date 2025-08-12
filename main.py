@@ -316,6 +316,29 @@ def check_availability_node(state: AgentState) -> AgentState:
     """Node for checking available appointment slots and recommending times."""
     print(f"📍 Node: check_availability")
     
+    # Check if this is a rescheduling request
+    form_data = state.get("form_data", {})
+    name = form_data.get("name")
+    email = form_data.get("email")
+    
+    # If rescheduling, show existing appointments first
+    if name or email:
+        print(f"🔍 Checking for existing appointments for {name or email}")
+        result = get_upcoming_event(name=name, email=email)
+        
+        if result:
+            # Parse the ISO datetime and format it nicely
+            try:
+                from datetime import datetime
+                start_time = datetime.fromisoformat(result['start_time'].replace('Z', '+00:00'))
+                formatted_time = start_time.strftime("%A, %B %-d at %-I:%M %p")
+                existing_appointment_msg = f"📅 You currently have an appointment scheduled for {formatted_time}."
+            except Exception as e:
+                # Fallback to original format if parsing fails
+                existing_appointment_msg = f"📅 You currently have an appointment scheduled for {result['start_time']}."
+        else:
+            existing_appointment_msg = "📅 I couldn't find any existing appointments under your name or email."
+    
     # Get available slots for the next week
     available_slots = get_available_slots_next_week()
     
@@ -335,7 +358,6 @@ def check_availability_node(state: AgentState) -> AgentState:
     slots_display = "\n".join(slots_text)
     
     # Check if we have a datetime_str to validate
-    form_data = state.get("form_data", {})
     datetime_str = form_data.get("datetime_str")
     
     # Check if user selected a slot by number
@@ -378,11 +400,9 @@ def check_availability_node(state: AgentState) -> AgentState:
             
             if availability_result["available"]:
                 # Slot is available - check if we have all the info needed
-                name = form_data.get("name")
                 business_name = form_data.get("business_name")
                 address = form_data.get("address")
                 phone = form_data.get("phone")
-                email = form_data.get("email")
                 
                 print(f"🔍 Checking required fields:")
                 print(f"  - name: {name}")
@@ -392,8 +412,6 @@ def check_availability_node(state: AgentState) -> AgentState:
                 print(f"  - email: {email}")
                 
                 missing = []
-                if not name:
-                    missing.append("name")
                 if not business_name:
                     missing.append("business name")
                 if not address:
@@ -409,9 +427,9 @@ def check_availability_node(state: AgentState) -> AgentState:
                     # Still need more info
                     response = (
                         f"✅ {availability_result['message']}\n\n"
-                        f"Perfect! That time works. To complete your booking, I still need:\n"
+                        f"Perfect! That time works. To complete your {'rescheduling' if name or email else 'booking'}, I still need:\n"
                         f"• {', '.join(missing)}\n\n"
-                        f"What's your {'name' if 'name' in missing else 'business name' if 'business_name' in missing else 'address' if 'address' in missing else 'phone' if 'phone' in missing else 'email'}?"
+                        f"What's your {'business name' if 'business_name' in missing else 'address' if 'address' in missing else 'phone' if 'phone' in missing else 'email'}?"
                     )
                     state["messages"].append(AIMessage(content=response))
                     return state
@@ -434,24 +452,38 @@ def check_availability_node(state: AgentState) -> AgentState:
                 state["messages"].append(AIMessage(content=response))
                 return state
         else:
-            # Couldn't parse the datetime
-            response = "I couldn't understand that date and time. Could you rephrase it?"
+            # Couldn't parse the datetime (likely business hours violation)
+            response = "❌ I can only schedule appointments Monday through Friday, between 10 AM and 4 PM Central Time. Please choose a different time."
             state["messages"].append(AIMessage(content=response))
             return state
     
     # No specific time provided - show general availability
     print("🔍 No specific time provided - showing general availability")
     
-    response = (
-        f"🎯 Here are 3 available appointment slots for the next week:\n\n"
-        f"{slots_display}\n\n"
-        f"**Please note:** I cannot schedule appointments within 48 hours of now.\n"
-        f"**If these times don't work, we are available Monday through Friday, 10 AM - 4 PM Central Time.**\n\n"
-        f"You can:\n"
-        f"• Pick one of these times by saying the number (1, 2, or 3)\n"
-        f"• Suggest a different time within business hours\n\n"
-        f"What would you prefer?"
-    )
+    # Include existing appointment info if rescheduling
+    if name or email:
+        response = (
+            f"{existing_appointment_msg}\n\n"
+            f"🎯 Here are 3 available appointment slots for the next week:\n\n"
+            f"{slots_display}\n\n"
+            f"**Please note:** I cannot schedule appointments within 48 hours of now.\n"
+            f"**If these times don't work, we are available Monday through Friday, 10 AM - 4 PM Central Time.**\n\n"
+            f"You can:\n"
+            f"• Pick one of these times by saying the number (1, 2, or 3)\n"
+            f"• Suggest a different time within business hours\n\n"
+            f"What would you prefer?"
+        )
+    else:
+        response = (
+            f"🎯 Here are 3 available appointment slots for the next week:\n\n"
+            f"{slots_display}\n\n"
+            f"**Please note:** I cannot schedule appointments within 48 hours of now.\n"
+            f"**If these times don't work, we are available Monday through Friday, 10 AM - 4 PM Central Time.**\n\n"
+            f"You can:\n"
+            f"• Pick one of these times by saying the number (1, 2, or 3)\n"
+            f"• Suggest a different time within business hours\n\n"
+            f"What would you prefer?"
+        )
     
     # Store the available slots in form_data for later use
     if "form_data" not in state:
