@@ -322,7 +322,7 @@ def get_available_slots_next_week() -> list:
     
     # Calculate time boundaries
     now = datetime.now()
-    buffer_time = now + timedelta(hours=48)  # 48-hour buffer
+    buffer_time = now + timedelta(hours=24)  # 24-hour buffer (1 day notice)
     week_end = now + timedelta(days=7)  # Next week
     
     print(f"🔍 Checking availability from {buffer_time.strftime('%A, %B %-d at %-I:%M %p')} to {week_end.strftime('%A, %B %-d at %-I:%M %p')}")
@@ -366,8 +366,8 @@ def get_available_slots_next_week() -> list:
         # Generate slots for the next week, but spread them out
         slot_count = 0
         while current_time < week_end and slot_count < 3:
-            # Only consider business hours (10 AM - 4 PM)
-            if 10 <= current_time.hour < 16:
+            # Only consider business hours (10 AM - 4 PM) AND weekdays (Monday-Friday)
+            if 10 <= current_time.hour < 16 and current_time.weekday() < 5:  # Monday=0, Friday=4
                 # Check if this hour is available
                 if current_time not in busy_slots:
                     available_slots.append(current_time)
@@ -392,8 +392,11 @@ def get_available_slots_next_week() -> list:
                     # Move to next hour if this one is busy
                     current_time += timedelta(hours=1)
             else:
-                # Move to next business day
+                # Move to next business day (skip weekends)
                 current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                # Skip weekends
+                while current_time.weekday() >= 5:  # Saturday=5, Sunday=6
+                    current_time += timedelta(days=1)
         
         # Convert to formatted strings
         formatted_slots = []
@@ -440,14 +443,14 @@ def check_slot_available(datetime_str: str) -> dict:
                 "message": "❌ I can only schedule appointments between 10 AM and 4 PM Central Time."
             }
         
-        # Check if the slot is in the past or too soon (48-hour buffer)
+        # Check if the slot is in the past or too soon (24-hour buffer)
         now = datetime.now()
-        buffer_time = now + timedelta(hours=48)
+        buffer_time = now + timedelta(hours=24)
         
         if slot_start < buffer_time:
             return {
                 "available": False,
-                "message": "❌ I need at least 48 hours notice to schedule appointments."
+                "message": "❌ I need at least 24 hours notice to schedule appointments."
             }
         
         service = build("calendar", "v3", credentials=creds)
