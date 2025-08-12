@@ -230,16 +230,12 @@ def should_continue_chatting(state: AgentState) -> AgentState:
             state["next"] = "lookup_appointment"
             
     elif decision == "reschedule_appointment":
-        # For rescheduling, we need name/email AND new datetime
+        # For rescheduling, we need name/email, but NOT datetime yet
         name = state.get("form_data", {}).get("name")
         email = state.get("form_data", {}).get("email")
-        datetime_str = state.get("form_data", {}).get("datetime_str")
         
         if not (name or email):
             print("🛑 Missing name or email for rescheduling — keep chatting.")
-            state["next"] = "chat"
-        elif not datetime_str:
-            print("🛑 Missing new datetime for rescheduling — keep chatting.")
             state["next"] = "chat"
         else:
             print("🔄 User wants to reschedule - routing to availability check")
@@ -290,28 +286,11 @@ def reschedule_appointment_node(state: AgentState) -> AgentState:
     
     print(f"🔄 Rescheduling appointment for {name or email} to {datetime_str}")
     
-    # Parse the datetime using the existing LLM parser
-    if datetime_str:
-        parsed_datetime = parse_datetime_with_llm(datetime_str)
-        if parsed_datetime:
-            # Convert to ISO format for the reschedule tool
-            iso_datetime = parsed_datetime.isoformat()
-            print(f"✅ Parsed datetime: {datetime_str} → {iso_datetime}")
-        else:
-            # Date parsing failed
-            error_msg = f"❌ I couldn't understand that date and time: '{datetime_str}'. Please provide it in a clear format like 'Wednesday at 2pm' or 'August 15th at 3:00 PM'."
-            state["messages"].append(AIMessage(content=error_msg))
-            return state
-    else:
-        error_msg = "❌ No date and time provided for rescheduling."
-        state["messages"].append(AIMessage(content=error_msg))
-        return state
-    
-    # Call the reschedule tool with the parsed ISO datetime
+    # Call the reschedule tool with the datetime string
     result = reschedule_appointment(
         name=name,
         email=email,
-        new_datetime_str=iso_datetime
+        new_datetime_str=datetime_str
     )
     
     # Add the result to the messages
@@ -403,11 +382,17 @@ def check_availability_node(state: AgentState) -> AgentState:
             availability_result = check_slot_available(iso_datetime)
             
             if availability_result["available"]:
-                # Slot is available - check if we have all the info needed
-                business_name = form_data.get("business_name")
-                address = form_data.get("address")
-                phone = form_data.get("phone")
+                # If this is a rescheduling request, proceed to reschedule
+                if name or email:
+                    print("🔄 Rescheduling - proceeding with new time")
+                    # Update form_data with the new datetime
+                    form_data["datetime_str"] = iso_datetime
+                    state["form_data"] = form_data
+                    # Route to reschedule_appointment node
+                    state["next"] = "reschedule_appointment"
+                    return state
                 
+                # For new bookings, check required fields
                 missing = []
                 if not business_name:
                     missing.append("business name")
@@ -422,7 +407,7 @@ def check_availability_node(state: AgentState) -> AgentState:
                     # Still need more info
                     response = (
                         f"✅ {availability_result['message']}\n\n"
-                        f"Perfect! That time works. To complete your {'rescheduling' if name or email else 'booking'}, I still need:\n"
+                        f"Perfect! That time works. To complete your booking, I still need:\n"
                         f"• {', '.join(missing)}\n\n"
                         f"What's your {'business name' if 'business_name' in missing else 'address' if 'address' in missing else 'phone' if 'phone' in missing else 'email'}?"
                     )
@@ -570,6 +555,7 @@ builder.add_node("chat", chat_with_user)
 builder.add_node("should_continue_chatting", should_continue_chatting)
 builder.add_node("check_availability", check_availability_node)
 builder.add_node("lookup_appointment", lookup_appointment)
+builder.add_node("reschedule_appointment", reschedule_appointment_node)
 
 
 builder.set_entry_point("chat")
@@ -580,11 +566,13 @@ builder.add_conditional_edges(
     {
         "check_availability": "check_availability",
         "lookup_appointment": "lookup_appointment",
+        "reschedule_appointment": "reschedule_appointment",
         "chat": END  
     }
 )
 builder.add_edge("check_availability", "should_continue_chatting")
 builder.add_edge("lookup_appointment", END)
+builder.add_edge("reschedule_appointment", END)
 
 
 
