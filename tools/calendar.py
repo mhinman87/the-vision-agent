@@ -403,20 +403,26 @@ def get_available_slots_next_week() -> list:
                     print(f"✅ Available slot: {current_time.strftime('%A, %B %-d at %-I:%M %p')}")
                     slot_count += 1
                     
-                    # Skip ahead to spread out the slots more aggressively
+                    # Skip ahead to spread out the slots across different days and times
                     if slot_count < 3:
-                        # For first slot, skip 3-4 hours or go to next day
+                        # First slot: Keep it (it's already good)
                         if slot_count == 1:
-                            if current_time.hour < 12:  # Morning
-                                current_time += timedelta(hours=4)  # Skip to afternoon
-                            else:  # Afternoon
-                                current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
-                        # For second slot, go to next day
+                            # Skip to next day, different time
+                            next_day = current_time + timedelta(days=1)
+                            # If morning (10-12), offer afternoon next day (2 PM)
+                            # If afternoon (2-4), offer morning next day (10 AM)
+                            if current_time.hour < 13:
+                                current_time = next_day.replace(hour=14, minute=0, second=0, microsecond=0)
+                            else:
+                                current_time = next_day.replace(hour=10, minute=0, second=0, microsecond=0)
+                        # Second slot: Skip to 2 days later, different time of day
                         elif slot_count == 2:
-                            current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
-                        # For third slot, go to day after next
-                        else:
-                            current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=2)
+                            next_day = current_time + timedelta(days=2)
+                            # Offer a different time than previous slots
+                            if current_time.hour < 13:
+                                current_time = next_day.replace(hour=14, minute=0, second=0, microsecond=0)
+                            else:
+                                current_time = next_day.replace(hour=11, minute=0, second=0, microsecond=0)
                 else:
                     # Move to next hour if this one is busy
                     current_time += timedelta(hours=1)

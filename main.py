@@ -441,7 +441,11 @@ def check_availability_node(state: AgentState) -> AgentState:
                 return state
         else:
             # Couldn't parse the datetime (likely business hours violation)
-            response = "❌ I can only schedule appointments Monday through Friday, between 10 AM and 4 PM Central Time. Please choose a different time."
+            response = (
+                "❌ I can only schedule appointments Monday through Friday, between 10 AM and 4 PM Central Time.\n\n"
+                f"Here are some available times:\n\n{slots_display}\n\n"
+                "Please pick one of these times or suggest a different time during business hours."
+            )
             state["messages"].append(AIMessage(content=response))
             return state
     
