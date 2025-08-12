@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from collections import defaultdict
-from tools.calendar import create_calendar_event
+from tools.calendar import create_calendar_event, get_upcoming_event
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import MessagesState
 from langchain_core.messages import HumanMessage
