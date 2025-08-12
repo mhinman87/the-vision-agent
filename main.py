@@ -124,17 +124,19 @@ def chat_with_user(state: AgentState) -> AgentState:
 
     # Call LLM to extract values and update the backpack
     try:
-        extract_response = llm_with_tools.invoke(extract_prompt)
-        raw = extract_response.content.strip()
-        print(f"🔍 Form data extracted from user message: {raw}")
+        # Skip extraction for single numbers (1, 2, 3) as they're slot selections
+        if not (last_user_message.strip().isdigit() and len(last_user_message.strip()) == 1):
+            extract_response = llm_with_tools.invoke(extract_prompt)
+            raw = extract_response.content.strip()
+            print(f"🔍 Form data extracted from user message: {raw}")
 
-        for line in raw.splitlines():
-            if ":" in line:
-                key, value = line.split(":", 1)
-                key = key.strip().lower()
-                value = value.strip()
-                if key in ["name", "datetime_str", "business_name", "address", "phone", "email"]:
-                    state["form_data"][key] = value
+            for line in raw.splitlines():
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    key = key.strip().lower()
+                    value = value.strip()
+                    if key in ["name", "datetime_str", "business_name", "address", "phone", "email"]:
+                        state["form_data"][key] = value
 
         print(f"📝 Form data updated: {state['form_data']}")
 
@@ -365,6 +367,12 @@ def check_availability_node(state: AgentState) -> AgentState:
                             # Update form_data with the selected datetime
                             form_data["datetime_str"] = datetime_str
                             state["form_data"] = form_data
+                            
+                            # If this is a rescheduling request, proceed directly to reschedule
+                            if name or email:
+                                print("🔄 Selected slot for rescheduling - proceeding to reschedule")
+                                state["next"] = "reschedule_appointment"
+                                return state
                             break
                     except (ValueError, KeyError, IndexError) as e:
                         pass
