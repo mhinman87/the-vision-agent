@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from collections import defaultdict
-from tools.calendar import create_calendar_event, get_upcoming_event, reschedule_appointment
+from tools.calendar import create_calendar_event, get_upcoming_event, reschedule_appointment, parse_datetime_with_llm
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import MessagesState
 from langchain_core.messages import HumanMessage
@@ -287,18 +287,32 @@ def reschedule_appointment_node(state: AgentState) -> AgentState:
     
     print(f"🔄 Rescheduling appointment for {name or email} to {datetime_str}")
     
-    # Call the reschedule tool
+    # Parse the datetime using the existing LLM parser
+    if datetime_str:
+        parsed_datetime = parse_datetime_with_llm(datetime_str)
+        if parsed_datetime:
+            # Convert to ISO format for the reschedule tool
+            iso_datetime = parsed_datetime.isoformat()
+            print(f"✅ Parsed datetime: {datetime_str} → {iso_datetime}")
+        else:
+            # Date parsing failed
+            error_msg = f"❌ I couldn't understand that date and time: '{datetime_str}'. Please provide it in a clear format like 'Wednesday at 2pm' or 'August 15th at 3:00 PM'."
+            state["messages"].append(AIMessage(content=error_msg))
+            return state
+    else:
+        error_msg = "❌ No date and time provided for rescheduling."
+        state["messages"].append(AIMessage(content=error_msg))
+        return state
+    
+    # Call the reschedule tool with the parsed ISO datetime
     result = reschedule_appointment(
         name=name,
         email=email,
-        new_datetime_str=datetime_str
+        new_datetime_str=iso_datetime
     )
     
     # Add the result to the messages
     state["messages"].append(AIMessage(content=result))
-    
-    # Clear the form data after rescheduling
-    state["form_data"] = {}
     
     return state
 

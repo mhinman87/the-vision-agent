@@ -77,10 +77,7 @@ def run_booking_tool(state: AgentState) -> AgentState:
         # }
         # print(f"🗃️ Saved appointment for {name}: {appointments_by_name[name]}")
 
-        # 🎒 Clear backpack
-        print("🧹 Clearing form_data after booking")
-        state["form_data"] = {}
-        print("🎒 form_data after clearing:", state["form_data"])
+        # 🎒 Keep form data for potential follow-up actions
 
     except Exception as e:
         print(f"❌ Tool failed: {str(e)}")
