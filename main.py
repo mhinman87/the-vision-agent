@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from collections import defaultdict
-from tools.calendar import create_calendar_event, get_upcoming_event, reschedule_appointment, parse_datetime_with_llm
+from tools.calendar import create_calendar_event, get_upcoming_event, reschedule_appointment, parse_datetime_with_llm, get_available_slots_next_week
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import MessagesState
 from langchain_core.messages import HumanMessage
@@ -20,7 +20,7 @@ from langchain_core.messages import SystemMessage
 from typing import Dict
 from state.agent_state import AgentState
 from llm_config import llm, llm_with_tools, classifier_llm
-from nodes.booking import run_booking_tool
+
 
 
 from pydantic import BaseModel
@@ -314,6 +314,123 @@ def reschedule_appointment_node(state: AgentState) -> AgentState:
     # Add the result to the messages
     state["messages"].append(AIMessage(content=result))
     
+    return state
+
+
+def check_availability_node(state: AgentState) -> AgentState:
+    """Node for checking available appointment slots and recommending times."""
+    print(f"📍 Node: check_availability")
+    
+    # Get available slots for the next week
+    available_slots = get_available_slots_next_week()
+    
+    if not available_slots:
+        response = (
+            "❌ I'm having trouble checking my availability right now. "
+            "Please try again later or let me know a specific time you'd like to book."
+        )
+        state["messages"].append(AIMessage(content=response))
+        return state
+    
+    # Format the available slots for display
+    slots_text = []
+    for i, slot in enumerate(available_slots, 1):
+        slots_text.append(f"{i}. {slot['display']}")
+    
+    slots_display = "\n".join(slots_text)
+    
+    response = (
+        f"🎯 Here are 3 available appointment slots for the next week:\n\n"
+        f"{slots_display}\n\n"
+        f"**Please note:** I cannot schedule appointments within 48 hours of now.\n\n"
+        f"You can:\n"
+        f"• Pick one of these times by saying the number (1, 2, or 3)\n"
+        f"• Suggest a different time within business hours (10 AM - 4 PM Central)\n"
+        f"• Ask me to check availability for a different week\n\n"
+        f"What would you prefer?"
+    )
+    
+    # Store the available slots in form_data for later use
+    if "form_data" not in state:
+        state["form_data"] = {}
+    state["form_data"]["available_slots"] = available_slots
+    
+    state["messages"].append(AIMessage(content=response))
+    return state
+
+
+def run_booking_tool(state: AgentState) -> AgentState:
+    print("📍 Node: run_booking_tool")
+    print("🚨 BOOKING NODE IS ACTUALLY RUNNING!")
+    print(f"🔍 DEBUG: Booking node received state keys: {list(state.keys())}")
+    print(f"🔍 DEBUG: Booking node received form_data: {state.get('form_data', {})}")
+    form_data = state.get("form_data", {})
+
+    # Gather fields
+    name = form_data.get("name")
+    datetime_str = form_data.get("datetime_str")
+    business_name = form_data.get("business_name")
+    address = form_data.get("address")
+    phone = form_data.get("phone")
+    email = form_data.get("email")
+
+    # Check for required fields
+    missing = []
+    if not name:
+        missing.append("name")
+    if not datetime_str:
+        missing.append("date & time")
+    if not business_name:
+        missing.append("business name")
+    if not address:
+        missing.append("address")
+    if not phone:
+        missing.append("phone")
+    if not email:
+        missing.append("email")
+
+    if missing:
+        msg = "Before I can book your appointment, I still need: " + ", ".join(missing)
+        print(f"🛑 Missing fields: {missing}")
+        state["messages"].append(AIMessage(content=msg))
+        return state
+
+    # ⏰ Parse and validate datetime
+    parsed_datetime = parse_datetime_with_llm(datetime_str)
+
+    if not parsed_datetime:
+        state["messages"].append(AIMessage(content="I couldn't understand that date and time. Could you rephrase it?"))
+        return state
+
+    # 🕙 Only allow appointments between 10 AM and 4 PM
+    if not (10 <= parsed_datetime.hour < 16):
+        state["messages"].append(AIMessage(
+            content="I can only book appointments between 10 AM and 4 PM. Can you suggest a different time?"
+        ))
+        return state
+
+    # ✅ Overwrite datetime_str with validated ISO string
+    form_data["datetime_str"] = parsed_datetime.isoformat()
+
+    # 📆 Try booking
+    try:
+        result = create_calendar_event(
+            datetime_str=form_data["datetime_str"],
+            name=name,
+            business_name=business_name,
+            address=address,
+            phone=phone,
+            email=email
+        )
+        print(f"📆 Tool result: {result}")
+        state["messages"].append(AIMessage(content=result))
+
+        # 🎒 Keep form data for potential follow-up actions
+
+    except Exception as e:
+        print(f"❌ Tool failed: {str(e)}")
+        state["messages"].append(AIMessage(content="Sorry, I had trouble scheduling the event."))
+
     return state
 
 

@@ -297,4 +297,93 @@ def reschedule_appointment(
         return f"❌ Sorry, I encountered an error while rescheduling: {str(e)}"
 
 
+def get_available_slots_next_week() -> list:
+    """
+    Finds 3 available appointment slots across the next week.
+    Respects 48-hour buffer from current time and business hours (10 AM - 4 PM Central).
+    Returns a list of available datetime strings.
+    """
+    creds = get_persistent_credentials()
+    if not creds:
+        print("❌ No credentials available for availability check.")
+        return []
+
+    service = build("calendar", "v3", credentials=creds)
+    
+    # Calculate time boundaries
+    now = datetime.now()
+    buffer_time = now + timedelta(hours=48)  # 48-hour buffer
+    week_end = now + timedelta(days=7)  # Next week
+    
+    print(f"🔍 Checking availability from {buffer_time.strftime('%A, %B %-d at %-I:%M %p')} to {week_end.strftime('%A, %B %-d at %-I:%M %p')}")
+    
+    try:
+        # Get all events in the next week
+        events_result = service.events().list(
+            calendarId='primary',
+            timeMin=buffer_time.isoformat() + 'Z',
+            timeMax=week_end.isoformat() + 'Z',
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+
+        events = events_result.get('items', [])
+        print(f"📅 Found {len(events)} existing events in the next week")
+        
+        # Create a set of busy time slots (hourly blocks)
+        busy_slots = set()
+        for event in events:
+            start = event.get('start', {}).get('dateTime')
+            if start:
+                event_start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                # Mark the hour as busy
+                busy_slots.add(event_start.replace(minute=0, second=0, microsecond=0))
+        
+        # Generate available slots
+        available_slots = []
+        current_time = buffer_time
+        
+        # Round up to the next hour
+        if current_time.minute > 0:
+            current_time = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        
+        # Ensure we start at business hours
+        if current_time.hour < 10:
+            current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0)
+        elif current_time.hour >= 16:
+            current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        
+        # Generate slots for the next week
+        while current_time < week_end and len(available_slots) < 3:
+            # Only consider business hours (10 AM - 4 PM)
+            if 10 <= current_time.hour < 16:
+                # Check if this hour is available
+                if current_time not in busy_slots:
+                    available_slots.append(current_time)
+                    print(f"✅ Available slot: {current_time.strftime('%A, %B %-d at %-I:%M %p')}")
+                
+                # Move to next hour
+                current_time += timedelta(hours=1)
+            else:
+                # Move to next business day
+                current_time = current_time.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        
+        # Convert to formatted strings
+        formatted_slots = []
+        for slot in available_slots:
+            formatted_slots.append({
+                "datetime": slot.isoformat(),
+                "display": slot.strftime("%A, %B %-d at %-I:%M %p"),
+                "day": slot.strftime("%A"),
+                "time": slot.strftime("%-I:%M %p")
+            })
+        
+        print(f"🎯 Found {len(formatted_slots)} available slots for the next week")
+        return formatted_slots
+
+    except Exception as e:
+        print(f"❌ Failed to check availability: {e}")
+        return []
+
+
 
