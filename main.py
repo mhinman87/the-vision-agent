@@ -280,8 +280,21 @@ def should_continue_chatting(state: AgentState) -> AgentState:
             decision = token
             break
     print(f"🔍 LLM decision: {decision}")
+    # Persist intent for downstream nodes
+    state["intent"] = decision
     
-    # Now check requirements for each action
+    # If user just picked a numbered option while classifier says 'chat', still route to availability
+    if decision == "chat":
+        form_data = state.get("form_data", {})
+        available_slots = form_data.get("available_slots")
+        last_user_message = _get_last_human_message(state)
+        if available_slots:
+            choice = interpret_slot_selection_with_llm(last_user_message, available_slots)
+            if choice.get("type") in {"index", "datetime"}:
+                state["next"] = "check_availability"
+                return state
+
+    # Now check requirements for each action normally
     if decision == "schedule_call":
         # For scheduling, always check availability first to show available slots
         print("🎯 User wants to schedule - routing to availability check")
@@ -372,13 +385,14 @@ def check_availability_node(state: AgentState) -> AgentState:
     """Node for checking available appointment slots and recommending times."""
     print(f"📍 Node: check_availability")
     
-    # Check if this is a rescheduling request
+    # Check if this is a rescheduling request (based on explicit intent, not presence of name/email)
     form_data = state.get("form_data", {})
     name = form_data.get("name")
     email = form_data.get("email")
+    is_reschedule = state.get("intent") == "reschedule_appointment"
     
-    # If rescheduling, show existing appointments first
-    if name or email:
+    # If rescheduling, show existing appointment first
+    if is_reschedule and (name or email):
         print(f"🔍 Checking for existing appointments for {name or email}")
         result = get_upcoming_event(name=name, email=email)
         
@@ -429,7 +443,7 @@ def check_availability_node(state: AgentState) -> AgentState:
                 # Update form_data with the selected datetime
                 form_data["datetime_str"] = datetime_str
                 state["form_data"] = form_data
-                if name or email:
+                if is_reschedule and (name or email):
                     print("🔄 Selected slot for rescheduling - proceeding to reschedule")
                     state["next"] = "reschedule_appointment"
                     return state
@@ -459,7 +473,7 @@ def check_availability_node(state: AgentState) -> AgentState:
             
             if availability_result["available"]:
                 # If this is a rescheduling request, proceed to reschedule
-                if name or email:
+                if is_reschedule and (name or email):
                     print("🔄 Rescheduling - proceeding with new time")
                     # Update form_data with the new datetime
                     form_data["datetime_str"] = iso_datetime
@@ -526,7 +540,7 @@ def check_availability_node(state: AgentState) -> AgentState:
     print("🔍 No specific time provided - showing general availability")
     
     # Include existing appointment info if rescheduling
-    if name or email:
+    if is_reschedule and (name or email):
         response = (
             f"{existing_appointment_msg}\n\n"
             f"🎯 Here are 3 available appointment slots for the next week:\n\n"
