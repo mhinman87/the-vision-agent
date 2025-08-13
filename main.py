@@ -72,7 +72,8 @@ chat_sessions: Dict[str, AgentState] = defaultdict(lambda: {
     """)],
     "classification": None,
     "next_action": None,
-    "form_data": {}
+    "form_data": {},
+    "pending_action": None
 })
 
 
@@ -324,7 +325,10 @@ def should_continue_chatting(state: AgentState) -> AgentState:
     # print(f"🔍 LLM decision: {decision}")
     # Persist intent for downstream nodes
     state["intent"] = decision
-    
+    # Persist pending action when an actionable intent appears
+    if decision in ("schedule_call", "lookup_appointment", "reschedule_appointment"):
+        state["pending_action"] = decision
+
     # If user just picked a numbered option while classifier says 'chat', still route to availability
     if decision == "chat":
         form_data = state.get("form_data", {})
@@ -335,6 +339,18 @@ def should_continue_chatting(state: AgentState) -> AgentState:
             if choice.get("type") in {"index", "datetime"}:
                 state["next"] = "check_availability"
                 return state
+        # Honor sticky pending_action during chat
+        if state.get("pending_action") == "schedule_call":
+            state["next"] = "check_availability"
+            return state
+        if state.get("pending_action") == "reschedule_appointment":
+            state["next"] = "check_availability"
+            return state
+        if state.get("pending_action") == "lookup_appointment":
+            name = form_data.get("name")
+            email = form_data.get("email")
+            state["next"] = "lookup_appointment" if (name or email) else "chat"
+            return state
 
     # Now check requirements for each action normally
     if decision == "schedule_call":
@@ -431,7 +447,7 @@ def check_availability_node(state: AgentState) -> AgentState:
     form_data = state.get("form_data", {})
     name = form_data.get("name")
     email = form_data.get("email")
-    is_reschedule = state.get("intent") == "reschedule_appointment"
+    is_reschedule = (state.get("pending_action") == "reschedule_appointment")
     
     # If rescheduling, show existing appointment first
     if is_reschedule and (name or email):
@@ -489,13 +505,25 @@ def check_availability_node(state: AgentState) -> AgentState:
                 return state
             else:
                 display = selected_slot["display"] if selected_slot else "that time"
-                response = (
-                    f"✅ Great choice! I'll schedule you for {display}.\n\n"
-                    "To complete your booking, I'll need some information from you.\n\n"
-                    "What's your name?"
-                )
-                state["messages"].append(AIMessage(content=response))
-                return state
+                # Ask one missing field at a time
+                required_order = ["name", "business_name", "address", "phone", "email"]
+                labels = {
+                    "name": "your name",
+                    "business_name": "your business name",
+                    "address": "your address",
+                    "phone": "your phone number",
+                    "email": "your email",
+                }
+                next_field = next((f for f in required_order if not form_data.get(f)), None)
+                if next_field:
+                    response = (
+                        f"✅ Great choice! I'll schedule you for {display}.\n\n"
+                        f"Great — what's {labels[next_field]}?"
+                    )
+                    state["messages"].append(AIMessage(content=response))
+                    return state
+                else:
+                    return run_booking_tool(state)
         elif llm_choice.get("type") == "datetime":
             datetime_str = llm_choice.get("datetime_str")
     
