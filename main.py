@@ -141,12 +141,11 @@ def interpret_slot_selection_with_llm(user_message: str, available_slots: list) 
 def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
 
-    # Generate Alfred's response
+    # Generate Alfred’s response
     response = llm_with_tools.invoke(state["messages"])
-    ai_msg = response.content.strip()
-    state["messages"].append(AIMessage(content=ai_msg))
-    
-   
+    ai_msg = (response.content or "").strip()
+    if ai_msg:
+        state["messages"].append(AIMessage(content=ai_msg))
 
     # Only initialize if not already present
     if "form_data" not in state:
@@ -160,7 +159,8 @@ def chat_with_user(state: AgentState) -> AgentState:
             break
 
     print(f"👤 User said: {last_user_message}")
-    print(f"🤖 Alfred said: {ai_msg}")
+    if ai_msg:
+        print(f"🤖 Alfred said: {ai_msg}")
 
     # Prompt to extract field updates
     extract_prompt = [
