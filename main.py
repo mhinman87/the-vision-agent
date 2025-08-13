@@ -4,6 +4,8 @@ load_dotenv()
 
 # main.py
 import os
+import re
+import json
 from langgraph.graph import StateGraph, END
 
 # from langgraph.checkpoint.sqlite import SqliteSaver
@@ -78,6 +80,58 @@ chat_sessions: Dict[str, AgentState] = defaultdict(lambda: {
 # --- Define the LLM chat node ---
 
 
+def _get_last_human_message(state: AgentState) -> str:
+    last_user_message = ""
+    for msg in reversed(state["messages"]):
+        if msg.type == "human":
+            last_user_message = msg.content
+            break
+    return last_user_message
+
+
+def interpret_slot_selection_with_llm(user_message: str, available_slots: list) -> dict:
+    """Use the base LLM to interpret a user's natural-language selection.
+    Returns a dict like {"type": "index", "index": 1-3} or {"type": "datetime", "datetime_str": "..."} or {"type": "none"}.
+    """
+    if not user_message or not available_slots:
+        return {"type": "none"}
+
+    # Build options text
+    options_lines = []
+    for i, slot in enumerate(available_slots, 1):
+        options_lines.append(f"{i}. {slot['display']}")
+    options_text = "\n".join(options_lines)
+
+    system_prompt = (
+        "You help interpret a user's selection for appointment times. "
+        "Given the user's reply and the numbered options shown, decide if they picked by number "
+        "(like '3', 'number 2', 'the third') or restated a date/time matching one option, or provided a new time. "
+        "Respond ONLY as strict JSON with one of these shapes:\n"
+        "{\"type\": \"index\", \"index\": 1}\n"
+        "{\"type\": \"datetime\", \"datetime_str\": \"Monday at 11am\"}\n"
+        "{\"type\": \"none\"}"
+    )
+
+    human_prompt = (
+        f"Options:\n{options_text}\n\n"
+        f"User reply: {user_message}\n\n"
+        "If the reply clearly maps to an option number (including phrases like 'number 3', 'the third', 'last one'), return index.\n"
+        "If they restate a time that matches one of the options, return datetime with the restated time as given.\n"
+        "Else return none."
+    )
+
+    try:
+        resp = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=human_prompt)])
+        raw = (resp.content or "").strip()
+        data = json.loads(raw)
+        if isinstance(data, dict) and data.get("type") in {"index", "datetime", "none"}:
+            return data
+    except Exception:
+        pass
+
+    return {"type": "none"}
+
+
 def chat_with_user(state: AgentState) -> AgentState:
     print("📍 Node: chat_with_user")
 
@@ -124,8 +178,16 @@ def chat_with_user(state: AgentState) -> AgentState:
 
     # Call LLM to extract values and update the backpack
     try:
-        # Skip extraction for single numbers (1, 2, 3) as they're slot selections
-        if not (last_user_message.strip().isdigit() and len(last_user_message.strip()) == 1):
+        # Skip extraction when the user is selecting a numbered slot we just showed
+        skip_extraction = False
+        if state.get("form_data", {}).get("available_slots"):
+            lm = last_user_message.strip().lower()
+            if re.search(r"\b(?:number|no\.?|option|slot|choice|pick)\s*(1|2|3)\b", lm) or \
+               re.search(r"\b(1|2|3|one|two|three|first|second|third)\b", lm):
+                skip_extraction = True
+
+        # Also skip for single digits (1, 2, 3)
+        if not ((last_user_message.strip().isdigit() and len(last_user_message.strip()) == 1) or skip_extraction):
             extract_response = llm_with_tools.invoke(extract_prompt)
             raw = extract_response.content.strip()
             print(f"🔍 Form data extracted from user message: {raw}")
@@ -212,6 +274,11 @@ def should_continue_chatting(state: AgentState) -> AgentState:
     ] + recent_messages)
 
     decision = response.content.strip().lower()
+    # Normalize noisy classifier outputs to valid tokens
+    for token in ["schedule_call", "lookup_appointment", "reschedule_appointment", "chat"]:
+        if token in decision:
+            decision = token
+            break
     print(f"🔍 LLM decision: {decision}")
     
     # Now check requirements for each action
@@ -328,8 +395,8 @@ def check_availability_node(state: AgentState) -> AgentState:
         else:
             existing_appointment_msg = "📅 I couldn't find any existing appointments under your name or email."
     
-    # Get available slots for the next week
-    available_slots = get_available_slots_next_week()
+    # Prefer previously shown slots if available to keep numbering consistent
+    available_slots = form_data.get("available_slots") or get_available_slots_next_week()
     
     if not available_slots:
         response = (
@@ -349,51 +416,34 @@ def check_availability_node(state: AgentState) -> AgentState:
     # Check if we have a datetime_str to validate
     datetime_str = form_data.get("datetime_str")
     
-    # Check if user selected a slot by number
+    # Check if user selected a slot by number or restated a date/time using LLM
     if not datetime_str:
-        # Look for number selections in recent messages
-        recent_messages = state.get("messages", [])
-        for msg in reversed(recent_messages[-3:]):  # Check last 3 messages
-            if msg.type == "human":
-                content = msg.content.strip().lower()
-                # Check for number selections (1, 2, or 3) with variations
-                number_words = {
-                    "one": 1, "two": 2, "three": 3,
-                    "1": 1, "2": 2, "3": 3,
-                    "number 1": 1, "number 2": 2, "number 3": 3,
-                    "number one": 1, "number two": 2, "number three": 3,
-                    "let's do 1": 1, "let's do 2": 2, "let's do 3": 3,
-                    "let's do number 1": 1, "let's do number 2": 2, "let's do number 3": 3,
-                    "let's do one": 1, "let's do two": 2, "let's do three": 3
-                }
-                if content in number_words:
-                    try:
-                        slot_index = number_words[content]
-                        if 1 <= slot_index <= len(available_slots):
-                            selected_slot = available_slots[slot_index - 1]
-                            datetime_str = selected_slot["datetime"]
-                            print(f"🎯 User selected slot {slot_index}: {selected_slot['display']}")
-                            # Update form_data with the selected datetime
-                            form_data["datetime_str"] = datetime_str
-                            state["form_data"] = form_data
-                            
-                            # If this is a rescheduling request, proceed directly to reschedule
-                            if name or email:
-                                print("🔄 Selected slot for rescheduling - proceeding to reschedule")
-                                state["next"] = "reschedule_appointment"
-                                return state
-                            else:
-                                # For new bookings, ask for required info
-                                response = (
-                                    f"✅ Great choice! I'll schedule you for {selected_slot['display']}.\n\n"
-                                    "To complete your booking, I'll need some information from you.\n\n"
-                                    "What's your name?"
-                                )
-                                state["messages"].append(AIMessage(content=response))
-                                return state
-                            break
-                    except (ValueError, KeyError, IndexError) as e:
-                        pass
+        last_user_message = _get_last_human_message(state)
+        llm_choice = interpret_slot_selection_with_llm(last_user_message, available_slots)
+        if llm_choice.get("type") == "index":
+            idx = llm_choice.get("index")
+            if isinstance(idx, int) and 1 <= idx <= len(available_slots):
+                selected_slot = available_slots[idx - 1]
+                datetime_str = selected_slot["datetime"]
+                print(f"🎯 LLM interpreted selection index {idx}: {selected_slot['display']}")
+                # Update form_data with the selected datetime
+                form_data["datetime_str"] = datetime_str
+                state["form_data"] = form_data
+                if name or email:
+                    print("🔄 Selected slot for rescheduling - proceeding to reschedule")
+                    state["next"] = "reschedule_appointment"
+                    return state
+                else:
+                    response = (
+                        f"✅ Great choice! I'll schedule you for {selected_slot['display']}.\n\n"
+                        "To complete your booking, I'll need some information from you.\n\n"
+                        "What's your name?"
+                    )
+                    state["messages"].append(AIMessage(content=response))
+                    return state
+        elif llm_choice.get("type") == "datetime":
+            # Use the user's restated datetime
+            datetime_str = llm_choice.get("datetime_str")
     
     if datetime_str:
         # User provided a specific time - check if it's available
