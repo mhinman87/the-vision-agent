@@ -5,7 +5,6 @@ load_dotenv()
 # main.py
 import os
 import re
-import json
 from langgraph.graph import StateGraph, END
 
 # from langgraph.checkpoint.sqlite import SqliteSaver
@@ -90,8 +89,11 @@ def _get_last_human_message(state: AgentState) -> str:
 
 
 def interpret_slot_selection_with_llm(user_message: str, available_slots: list) -> dict:
-    """Use the base LLM to interpret a user's natural-language selection.
-    Returns a dict like {"type": "index", "index": 1-3} or {"type": "datetime", "datetime_str": "..."} or {"type": "none"}.
+    """Use the LLM to interpret the user's selection, LLM-first and JSON-free.
+    Returns:
+      {"type": "iso", "iso": "2025-08-18T10:00:00"} if they picked one of the shown options
+      {"type": "datetime", "datetime_str": "monday at 11am"} if they propose a new time
+      {"type": "none"} otherwise
     """
     if not user_message or not available_slots:
         return {"type": "none"}
@@ -99,33 +101,37 @@ def interpret_slot_selection_with_llm(user_message: str, available_slots: list) 
     # Build options text
     options_lines = []
     for i, slot in enumerate(available_slots, 1):
-        options_lines.append(f"{i}. {slot['display']}")
+        options_lines.append(f"{i}. {slot['display']} ({slot['datetime']})")
     options_text = "\n".join(options_lines)
 
     system_prompt = (
-        "You help interpret a user's selection for appointment times. "
-        "Given the user's reply and the numbered options shown, decide if they picked by number "
-        "(like '3', 'number 2', 'the third') or restated a date/time matching one option, or provided a new time. "
-        "Respond ONLY as strict JSON with one of these shapes:\n"
-        "{\"type\": \"index\", \"index\": 1}\n"
-        "{\"type\": \"datetime\", \"datetime_str\": \"Monday at 11am\"}\n"
-        "{\"type\": \"none\"}"
+        "You help interpret which appointment option the user picked.\n"
+        "We have a list of numbered options; each includes an ISO datetime in parentheses.\n"
+        "Rules for your reply (no extra text):\n"
+        "- If the user picked one of the shown options (by number or restating it), reply with the exact ISO datetime string from that option.\n"
+        "- If they proposed a different time (not in the list), reply with: NEW: <their time>\n"
+        "- If unclear, reply exactly: NONE"
     )
 
     human_prompt = (
         f"Options:\n{options_text}\n\n"
         f"User reply: {user_message}\n\n"
-        "If the reply clearly maps to an option number (including phrases like 'number 3', 'the third', 'last one'), return index.\n"
-        "If they restate a time that matches one of the options, return datetime with the restated time as given.\n"
-        "Else return none."
+        "Respond using the rules above."
     )
 
     try:
         resp = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=human_prompt)])
         raw = (resp.content or "").strip()
-        data = json.loads(raw)
-        if isinstance(data, dict) and data.get("type") in {"index", "datetime", "none"}:
-            return data
+        # Exact ISO match from options
+        for slot in available_slots:
+            if raw == slot["datetime"]:
+                return {"type": "iso", "iso": raw}
+        # New time proposal
+        if raw.lower().startswith("new:"):
+            return {"type": "datetime", "datetime_str": raw.split(":", 1)[1].strip()}
+        # None/unclear
+        if raw.upper() == "NONE":
+            return {"type": "none"}
     except Exception:
         pass
 
@@ -140,7 +146,7 @@ def chat_with_user(state: AgentState) -> AgentState:
     ai_msg = response.content.strip()
     state["messages"].append(AIMessage(content=ai_msg))
     
-    print(f"🤖 Alfred said: {ai_msg}")
+   
 
     # Only initialize if not already present
     if "form_data" not in state:
@@ -154,6 +160,7 @@ def chat_with_user(state: AgentState) -> AgentState:
             break
 
     print(f"👤 User said: {last_user_message}")
+    print(f"🤖 Alfred said: {ai_msg}")
 
     # Prompt to extract field updates
     extract_prompt = [
@@ -190,7 +197,7 @@ def chat_with_user(state: AgentState) -> AgentState:
         if not ((last_user_message.strip().isdigit() and len(last_user_message.strip()) == 1) or skip_extraction):
             extract_response = llm_with_tools.invoke(extract_prompt)
             raw = extract_response.content.strip()
-            print(f"🔍 Form data extracted from user message: {raw}")
+            
 
             for line in raw.splitlines():
                 if ":" in line:
@@ -200,10 +207,10 @@ def chat_with_user(state: AgentState) -> AgentState:
                     if key in ["name", "datetime_str", "business_name", "address", "phone", "email"]:
                         state["form_data"][key] = value
 
-        print(f"📝 Form data updated: {state['form_data']}")
 
     except Exception as e:
-        print(f"⚠️ Extraction failed: {e}")
+        # print(f"⚠️ Extraction failed: {e}")
+        pass
 
     return state
 
@@ -279,7 +286,7 @@ def should_continue_chatting(state: AgentState) -> AgentState:
         if token in decision:
             decision = token
             break
-    print(f"🔍 LLM decision: {decision}")
+    # print(f"🔍 LLM decision: {decision}")
     # Persist intent for downstream nodes
     state["intent"] = decision
     
@@ -297,7 +304,7 @@ def should_continue_chatting(state: AgentState) -> AgentState:
     # Now check requirements for each action normally
     if decision == "schedule_call":
         # For scheduling, always check availability first to show available slots
-        print("🎯 User wants to schedule - routing to availability check")
+        # print("🎯 User wants to schedule - routing to availability check")
         state["next"] = "check_availability"
             
     elif decision == "lookup_appointment":
@@ -306,7 +313,7 @@ def should_continue_chatting(state: AgentState) -> AgentState:
         email = state.get("form_data", {}).get("email")
         
         if not (name or email):
-            print("🛑 Missing name or email for lookup — keep chatting.")
+            # print("🛑 Missing name or email for lookup — keep chatting.")
             state["next"] = "chat"
         else:
             state["next"] = "lookup_appointment"
@@ -317,10 +324,10 @@ def should_continue_chatting(state: AgentState) -> AgentState:
         email = state.get("form_data", {}).get("email")
         
         if not (name or email):
-            print("🛑 Missing name or email for rescheduling — keep chatting.")
+            # print("🛑 Missing name or email for rescheduling — keep chatting.")
             state["next"] = "chat"
         else:
-            print("🔄 User wants to reschedule - routing to availability check")
+            # print("🔄 User wants to reschedule - routing to availability check")
             state["next"] = "check_availability"
             
     else:
@@ -366,7 +373,7 @@ def reschedule_appointment_node(state: AgentState) -> AgentState:
     email = state.get("form_data", {}).get("email")
     datetime_str = state.get("form_data", {}).get("datetime_str")
     
-    print(f"🔄 Rescheduling appointment for {name or email} to {datetime_str}")
+    #print(f"🔄 Rescheduling appointment for {name or email} to {datetime_str}")
     
     # Call the reschedule tool with the datetime string
     result = reschedule_appointment(
@@ -393,7 +400,7 @@ def check_availability_node(state: AgentState) -> AgentState:
     
     # If rescheduling, show existing appointment first
     if is_reschedule and (name or email):
-        print(f"🔍 Checking for existing appointments for {name or email}")
+        # print(f"🔍 Checking for existing appointments for {name or email}")
         result = get_upcoming_event(name=name, email=email)
         
         if result:
@@ -430,43 +437,41 @@ def check_availability_node(state: AgentState) -> AgentState:
     # Check if we have a datetime_str to validate
     datetime_str = form_data.get("datetime_str")
     
-    # Check if user selected a slot by number or restated a date/time using LLM
+    # Check if user selected a slot by natural language via LLM (LLM-first)
     if not datetime_str:
         last_user_message = _get_last_human_message(state)
         llm_choice = interpret_slot_selection_with_llm(last_user_message, available_slots)
-        if llm_choice.get("type") == "index":
-            idx = llm_choice.get("index")
-            if isinstance(idx, int) and 1 <= idx <= len(available_slots):
-                selected_slot = available_slots[idx - 1]
-                datetime_str = selected_slot["datetime"]
-                print(f"🎯 LLM interpreted selection index {idx}: {selected_slot['display']}")
-                # Update form_data with the selected datetime
-                form_data["datetime_str"] = datetime_str
-                state["form_data"] = form_data
-                if is_reschedule and (name or email):
-                    print("🔄 Selected slot for rescheduling - proceeding to reschedule")
-                    state["next"] = "reschedule_appointment"
-                    return state
-                else:
-                    response = (
-                        f"✅ Great choice! I'll schedule you for {selected_slot['display']}.\n\n"
-                        "To complete your booking, I'll need some information from you.\n\n"
-                        "What's your name?"
-                    )
-                    state["messages"].append(AIMessage(content=response))
-                    return state
+        if llm_choice.get("type") == "iso":
+            # They picked one of the shown options
+            iso = llm_choice.get("iso")
+            datetime_str = iso
+            form_data["datetime_str"] = datetime_str
+            state["form_data"] = form_data
+            # Find the display for confirmation
+            selected_slot = next((s for s in available_slots if s["datetime"] == iso), None)
+            if is_reschedule and (name or email):
+                state["next"] = "reschedule_appointment"
+                return state
+            else:
+                display = selected_slot["display"] if selected_slot else "that time"
+                response = (
+                    f"✅ Great choice! I'll schedule you for {display}.\n\n"
+                    "To complete your booking, I'll need some information from you.\n\n"
+                    "What's your name?"
+                )
+                state["messages"].append(AIMessage(content=response))
+                return state
         elif llm_choice.get("type") == "datetime":
-            # Use the user's restated datetime
             datetime_str = llm_choice.get("datetime_str")
     
     if datetime_str:
         # User provided a specific time - check if it's available
-        print(f"🔍 Checking availability for specific slot: {datetime_str}")
+        # print(f"🔍 Checking availability for specific slot: {datetime_str}")
         
         parsed_datetime = parse_datetime_with_llm(datetime_str)
         if parsed_datetime:
             iso_datetime = parsed_datetime.isoformat()
-            print(f"✅ Parsed datetime: {datetime_str} → {iso_datetime}")
+            # print(f"✅ Parsed datetime: {datetime_str} → {iso_datetime}")
             
             # Check if this specific slot is available
             availability_result = check_slot_available(iso_datetime)
@@ -474,7 +479,7 @@ def check_availability_node(state: AgentState) -> AgentState:
             if availability_result["available"]:
                 # If this is a rescheduling request, proceed to reschedule
                 if is_reschedule and (name or email):
-                    print("🔄 Rescheduling - proceeding with new time")
+                    # print("🔄 Rescheduling - proceeding with new time")
                     # Update form_data with the new datetime
                     form_data["datetime_str"] = iso_datetime
                     state["form_data"] = form_data
@@ -510,7 +515,7 @@ def check_availability_node(state: AgentState) -> AgentState:
                     return state
                 else:
                     # We have all the info - proceed to booking
-                    print("🎯 All info collected - proceeding to booking")
+                    # print("🎯 All info collected - proceeding to booking")
                     return run_booking_tool(state)
             else:
                 # Slot is not available - show alternatives
@@ -537,7 +542,7 @@ def check_availability_node(state: AgentState) -> AgentState:
             return state
     
     # No specific time provided - show general availability
-    print("🔍 No specific time provided - showing general availability")
+    # print("🔍 No specific time provided - showing general availability")
     
     # Include existing appointment info if rescheduling
     if is_reschedule and (name or email):
@@ -602,7 +607,7 @@ def run_booking_tool(state: AgentState) -> AgentState:
 
     if missing:
         msg = "Before I can book your appointment, I still need: " + ", ".join(missing)
-        print(f"🛑 Missing fields: {missing}")
+        # print(f"🛑 Missing fields: {missing}")
         state["messages"].append(AIMessage(content=msg))
         return state
 
@@ -633,13 +638,13 @@ def run_booking_tool(state: AgentState) -> AgentState:
             phone=phone,
             email=email
         )
-        print(f"📆 Tool result: {result}")
+        # print(f"📆 Tool result: {result}")
         state["messages"].append(AIMessage(content=result))
 
         # 🎒 Keep form data for potential follow-up actions
 
     except Exception as e:
-        print(f"❌ Tool failed: {str(e)}")
+        # print(f"❌ Tool failed: {str(e)}")
         state["messages"].append(AIMessage(content="Sorry, I had trouble scheduling the event."))
 
     return state
