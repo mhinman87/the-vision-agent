@@ -197,7 +197,6 @@ def chat_with_user(state: AgentState) -> AgentState:
         if not ((last_user_message.strip().isdigit() and len(last_user_message.strip()) == 1) or skip_extraction):
             extract_response = llm_with_tools.invoke(extract_prompt)
             raw = extract_response.content.strip()
-            
 
             for line in raw.splitlines():
                 if ":" in line:
@@ -206,6 +205,42 @@ def chat_with_user(state: AgentState) -> AgentState:
                     value = value.strip()
                     if key in ["name", "datetime_str", "business_name", "address", "phone", "email"]:
                         state["form_data"][key] = value
+
+            # Heuristic fallback to capture common cases when the LLM doesn't format strictly
+            lm_text = last_user_message.strip()
+            form_data = state.get("form_data", {})
+
+            # Email
+            if "email" not in form_data or not form_data.get("email"):
+                em = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", lm_text)
+                if em:
+                    form_data["email"] = em.group(0)
+
+            # Name via phrases: "my name is X", "I'm X", "I am X"
+            if "name" not in form_data or not form_data.get("name"):
+                m = re.search(r"\b(?:my name is|i am|i'm)\s+([A-Z][a-zA-Z\-']+(?:\s+[A-Z][a-zA-Z\-']+)?)", lm_text, re.IGNORECASE)
+                if m:
+                    form_data["name"] = m.group(1).strip()
+
+            # Business name via phrases: "business name is X", "our business is X"
+            if "business_name" not in form_data or not form_data.get("business_name"):
+                m = re.search(r"\b(?:business name is|our business is|the business is)\s*[:\-]?\s*(.+)$", lm_text, re.IGNORECASE)
+                if m:
+                    possible_bn = m.group(1).strip().strip(". ")
+                    if possible_bn and "@" not in possible_bn:
+                        form_data["business_name"] = possible_bn
+
+            # Dash pattern: "LeftPart - rightpart" with email on right; infer left as name or business
+            if "-" in lm_text and ("email" in form_data and form_data.get("email")):
+                left = lm_text.split("-", 1)[0].strip()
+                token_count = len([t for t in re.split(r"\s+", left) if t])
+                if left and "@" not in left:
+                    if (not form_data.get("business_name") and (form_data.get("name") or token_count > 2)):
+                        form_data["business_name"] = left
+                    elif (not form_data.get("name") and token_count <= 2):
+                        form_data["name"] = left
+
+            state["form_data"] = form_data
 
 
     except Exception as e:
