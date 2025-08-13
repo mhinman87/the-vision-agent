@@ -448,6 +448,23 @@ def check_availability_node(state: AgentState) -> AgentState:
     name = form_data.get("name")
     email = form_data.get("email")
     is_reschedule = (state.get("pending_action") == "reschedule_appointment")
+    datetime_str = form_data.get("datetime_str")
+
+    # For new bookings, collect required info BEFORE showing slots, unless a specific time was given
+    if not is_reschedule and not datetime_str:
+        required_order = ["name", "business_name", "address", "phone", "email"]
+        labels = {
+            "name": "your name",
+            "business_name": "your business name",
+            "address": "your address",
+            "phone": "your phone number",
+            "email": "your email",
+        }
+        next_field = next((f for f in required_order if not form_data.get(f)), None)
+        if next_field:
+            response = f"To book your appointment, what's {labels[next_field]}?"
+            state["messages"].append(AIMessage(content=response))
+            return state
     
     # If rescheduling, show existing appointment first
     if is_reschedule and (name or email):
@@ -485,8 +502,7 @@ def check_availability_node(state: AgentState) -> AgentState:
     
     slots_display = "\n".join(slots_text)
     
-    # Check if we have a datetime_str to validate
-    datetime_str = form_data.get("datetime_str")
+    # Check if we have a datetime_str to validate (may have been set above)
     
     # Check if user selected a slot by natural language via LLM (LLM-first)
     if not datetime_str:
